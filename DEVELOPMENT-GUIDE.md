@@ -335,6 +335,39 @@ method. See the [Configuration Extraction example](#example-configuration-extrac
 specific inputs before `extract_config()` is called. The pipeline handles this automatically during
 post-processing.
 
+### Handling Optional ONNX Inputs
+
+ONNX uses an empty string `""` for "optional input not provided". The pipeline sets
+`ValueSource::Optional` on these inputs during parsing. Use `RawNode::get_input(index)` to access
+inputs safely: it returns `None` for both out-of-bounds and optional inputs.
+
+```rust
+// Good: returns None for absent or optional inputs
+if let Some(input) = node.get_input(2) {
+    // input is guaranteed to be a real, non-optional input
+    let value = input.value();
+}
+
+// Good: explicit is_optional() check when you need the index for mutation
+if node.inputs.len() > 1 && !node.inputs[1].is_optional() && node.inputs[1].is_constant() {
+    node.inputs[1].to_static()?;
+}
+
+// Bad: creates RuntimeInputRef with empty name, panics during codegen
+if let Some(input) = node.inputs.get(2) {
+    return Ok(SomeConfig::Runtime(RuntimeInputRef::new(input.name.clone(), 2)));
+}
+
+// Bad: unreliable after to_static() clears names
+if !node.inputs[0].name.is_empty() { ... }
+```
+
+**Key rules:**
+
+- Use `node.get_input(index)` in `extract_config()`, `is_noop()`, and read-only access
+- Use `!node.inputs[N].is_optional()` guards in `lift_constants()` (which needs `&mut` access)
+- Never check `name.is_empty()` to detect optional inputs; use `is_optional()` instead
+
 ## Architecture Overview
 
 ### ONNX-IR Pipeline

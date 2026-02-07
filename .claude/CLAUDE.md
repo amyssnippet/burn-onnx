@@ -90,6 +90,10 @@ examples/
   node-specific behavior is declared in `NodeProcessor` implementations. If a general module needs
   to handle a particular node type differently, that logic belongs in the node's processor, not in
   the framework code
+- **Optional input handling**: ONNX uses empty string `""` for "optional input not provided". Use
+  `node.get_input(index)` which returns `None` for out-of-bounds or optional inputs. In
+  `lift_constants()` (which needs `&mut`), guard with `!node.inputs[N].is_optional()`. Never check
+  `name.is_empty()` to detect optional inputs; use `is_optional()` instead
 - **Processor registration is mandatory**: Every node type must be registered in `registry.rs`.
   Unregistered types fall through to `DefaultProcessor` (which does `same_as_input`), producing
   wrong type info for ops that change tensor rank. Type inference pre-checks for unregistered ops

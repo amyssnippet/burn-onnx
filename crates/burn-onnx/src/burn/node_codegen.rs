@@ -122,6 +122,7 @@ impl_node_codegen_dispatch! {
     Elu,
     Softplus,
     Softsign,
+    ThresholdedRelu,
 
     // Shape ops
     Reshape,

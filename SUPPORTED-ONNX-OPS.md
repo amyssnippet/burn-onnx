@@ -204,7 +204,7 @@ functionality.
 | [Tanh][182]                      | ✅             | ✅           |
 | [TensorScatter][204]             | ❌             | ❌           |
 | [TfIdfVectorizer][183]           | ❌             | ❌           |
-| [ThresholdedRelu][184]           | ❌             | ❌           |
+| [ThresholdedRelu][184]           | ✅             | ✅           |
 | [Tile][185]                      | ✅             | ✅           |
 | [TopK][186]                      | ✅             | ✅           |
 | [Transpose][187]                 | ✅             | ✅           |

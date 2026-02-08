@@ -195,7 +195,7 @@ define_node_enum! {
     Mish => mish::MishNode,
     Softplus => softplus::SoftplusNode,
     Softsign => softsign::SoftsignNode,
-    ThresholdedRelu => elementwise::ElementwiseUnaryNode,
+    ThresholdedRelu => thresholded_relu::ThresholdedReluNode,
     HardSwish => hard_swish::HardSwishNode,
     PRelu => prelu::PReluNode,
 

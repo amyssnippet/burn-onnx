@@ -134,6 +134,7 @@ pub mod subgraph;
 pub mod sum;
 pub mod tan;
 pub mod tanh;
+pub mod thresholded_relu;
 pub mod tile;
 pub mod topk;
 pub mod transpose;

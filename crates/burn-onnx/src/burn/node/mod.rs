@@ -136,6 +136,7 @@ pub(crate) mod sub;
 pub(crate) mod sum;
 pub(crate) mod tan;
 pub(crate) mod tanh;
+pub(crate) mod thresholded_relu;
 pub(crate) mod tile;
 pub(crate) mod top_k;
 pub(crate) mod transpose;

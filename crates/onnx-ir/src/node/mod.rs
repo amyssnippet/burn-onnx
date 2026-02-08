@@ -45,6 +45,7 @@ pub mod softsign;
 pub mod sqrt;
 pub mod tan;
 pub mod tanh;
+pub mod thresholded_relu;
 
 // Binary element-wise operations
 pub mod and;

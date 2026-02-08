@@ -70,8 +70,8 @@ pub struct ElementwiseUnaryNode {
 }
 
 /// Node processor for element-wise unary operations that don't yet have
-/// dedicated processors (Selu,
-/// ThresholdedRelu). Will be removed as these ops get their own processors.
+/// dedicated processors (Selu).
+/// Will be removed as these ops get their own processors.
 #[allow(dead_code)]
 pub(crate) struct ElementwiseUnaryProcessor;
 
@@ -101,7 +101,6 @@ impl NodeProcessor for ElementwiseUnaryProcessor {
         let min_opset = match node.node_type {
             // Other activation functions
             crate::ir::NodeType::Selu => 6,
-            crate::ir::NodeType::ThresholdedRelu => 10,
             _ => {
                 return Err(ProcessError::Custom(format!(
                     "Unexpected node type for ElementwiseUnaryProcessor: {:?}",
@@ -129,7 +128,6 @@ impl NodeProcessor for ElementwiseUnaryProcessor {
         match builder.node_type {
             // Activation functions (still using ElementwiseUnaryNode)
             NodeType::Selu => Node::Selu(node),
-            NodeType::ThresholdedRelu => Node::ThresholdedRelu(node),
             _ => panic!(
                 "Unsupported node type for ElementwiseUnaryProcessor: {:?}",
                 builder.node_type
@@ -188,8 +186,8 @@ mod tests {
         let prefs = OutputPreferences::new();
 
         let mut node = crate::ir::RawNode {
-            node_type: NodeType::ThresholdedRelu,
-            name: "test_thresholded_relu".to_string(),
+            node_type: NodeType::Selu,
+            name: "test_selu".to_string(),
             inputs: vec![Argument {
                 name: "a".to_string(),
                 ty: ArgType::Tensor(TensorType {
@@ -209,12 +207,12 @@ mod tests {
             attrs: Default::default(),
         };
 
-        let result = processor.infer_types(&mut node, 9, &prefs);
+        let result = processor.infer_types(&mut node, 5, &prefs);
         assert!(matches!(
             result,
             Err(ProcessError::UnsupportedOpset {
-                required: 10,
-                actual: 9
+                required: 6,
+                actual: 5
             })
         ));
     }

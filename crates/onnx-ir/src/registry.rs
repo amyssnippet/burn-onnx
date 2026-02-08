@@ -604,6 +604,10 @@ impl ProcessorRegistry {
             NodeType::PRelu,
             Box::new(crate::node::prelu::PReluProcessor),
         );
+        registry.register(
+            NodeType::ThresholdedRelu,
+            Box::new(crate::node::thresholded_relu::ThresholdedReluProcessor),
+        );
 
         // Control flow operations
         registry.register(NodeType::If, Box::new(crate::node::if_node::IfProcessor));

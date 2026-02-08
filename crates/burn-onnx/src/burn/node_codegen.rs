@@ -120,6 +120,7 @@ impl_node_codegen_dispatch! {
     PRelu,
     Celu,
     Elu,
+    Selu,
     Softplus,
     Softsign,
     ThresholdedRelu,

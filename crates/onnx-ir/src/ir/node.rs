@@ -189,7 +189,7 @@ define_node_enum! {
     LeakyRelu => leaky_relu::LeakyReluNode,
     HardSigmoid => hard_sigmoid::HardSigmoidNode,
     Elu => elu::EluNode,
-    Selu => elementwise::ElementwiseUnaryNode,
+    Selu => selu::SeluNode,
     Celu => celu::CeluNode,
     Gelu => gelu::GeluNode,
     Mish => mish::MishNode,

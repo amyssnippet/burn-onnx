@@ -168,7 +168,7 @@ functionality.
 | [Scatter][149]                   | ❌             | ✅           |
 | [ScatterElements][150]           | ❌             | ❌           |
 | [ScatterND][151]                 | ✅             | ✅           |
-| [Selu][152]                      | ❌             | ❌           |
+| [Selu][152]                      | ✅             | ✅           |
 | [SequenceAt][153]                | ❌             | ❌           |
 | [SequenceConstruct][154]         | ❌             | ❌           |
 | [SequenceEmpty][155]             | ❌             | ❌           |

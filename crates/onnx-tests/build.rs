@@ -377,6 +377,7 @@ fn add_all_inputs(model_gen: &mut ModelGen) {
         .input("tests/slice/slice_with_steps.onnx")
         .input("tests/slice/slice_shape_with_steps.onnx")
         .input("tests/slice/slice_empty.onnx")
+        .input("tests/selu/selu.onnx")
         .input("tests/softmax/softmax.onnx")
         .input("tests/softplus/softplus.onnx")
         .input("tests/softsign/softsign.onnx")

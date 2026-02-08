@@ -208,6 +208,7 @@ impl ProcessorRegistry {
         );
         registry.register(NodeType::Celu, Box::new(crate::node::celu::CeluProcessor));
         registry.register(NodeType::Elu, Box::new(crate::node::elu::EluProcessor));
+        registry.register(NodeType::Selu, Box::new(crate::node::selu::SeluProcessor));
 
         // Logical operations
         registry.register(NodeType::Not, Box::new(crate::node::not::NotProcessor));

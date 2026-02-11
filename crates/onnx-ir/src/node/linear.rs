@@ -28,6 +28,7 @@
 //! - TODO: Test uses sum verification instead of exact values - Could miss subtle bugs in weight application
 
 use derive_new::new;
+use onnx_ir_derive::NodeBuilder;
 
 use crate::ir::{ArgType, Argument, AttributeValue, Node, RawNode, TensorType};
 use crate::processor::{
@@ -44,7 +45,7 @@ pub struct LinearConfig {
 }
 
 /// Node representation for Linear operation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, NodeBuilder)]
 pub struct LinearNode {
     pub name: String,
     pub inputs: Vec<Argument>,

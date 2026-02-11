@@ -4076,6 +4076,7 @@ dependencies = [
  "derive-new",
  "divan",
  "half",
+ "insta",
  "log",
  "memmap2",
  "onnx-ir-derive",

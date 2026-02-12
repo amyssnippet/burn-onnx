@@ -39,7 +39,22 @@ impl NodeCodegen for onnx_ir::node::xor::XorNode {
             (ArgType::Scalar(_), ArgType::Scalar(_)) => {
                 quote! { #lhs_value ^ #rhs_value }
             }
-            _ => panic!("Xor operation requires tensor or scalar inputs"),
+            (ArgType::Scalar(_), ArgType::Tensor(_)) => quote! {
+                if #lhs_value { #rhs_value.bool_not() } else { #rhs_value }
+            },
+            (ArgType::Tensor(_), ArgType::Scalar(_)) => quote! {
+                if #rhs_value { #lhs_value.bool_not() } else { #lhs_value }
+            },
+            (ArgType::Shape(_), ArgType::Shape(_)) => quote! {
+                {
+                    let mut result = #lhs_value;
+                    for (result_item, rhs_item) in result.iter_mut().zip(#rhs_value.iter()) {
+                        *result_item = if (*result_item != 0) ^ (*rhs_item != 0) { 1i64 } else { 0i64 };
+                    }
+                    result
+                }
+            },
+            _ => panic!("Xor operation requires tensor, scalar, or shape inputs"),
         };
 
         quote! {
@@ -54,6 +69,64 @@ mod tests {
     use burn::tensor::DType;
     use insta::assert_snapshot;
     use onnx_ir::node::xor::XorNodeBuilder;
+
+    #[test]
+    fn test_xor_scalar_tensor_forward() {
+        let node = XorNodeBuilder::new("xor1")
+            .input_scalar("lhs", DType::Bool)
+            .input_tensor("rhs", 4, DType::Bool)
+            .output_tensor("output", 4, DType::Bool)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, lhs: bool, rhs: Tensor<B, 4, Bool>) -> Tensor<B, 4, Bool> {
+            let output = if lhs { rhs.bool_not() } else { rhs };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_xor_tensor_scalar_forward() {
+        let node = XorNodeBuilder::new("xor1")
+            .input_tensor("lhs", 4, DType::Bool)
+            .input_scalar("rhs", DType::Bool)
+            .output_tensor("output", 4, DType::Bool)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, lhs: Tensor<B, 4, Bool>, rhs: bool) -> Tensor<B, 4, Bool> {
+            let output = if rhs { lhs.bool_not() } else { lhs };
+            output
+        }
+        ");
+    }
+
+    #[test]
+    fn test_xor_shape_forward() {
+        let node = XorNodeBuilder::new("xor1")
+            .input_shape("lhs", 3)
+            .input_shape("rhs", 3)
+            .output_shape("output", 3)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, lhs: [i64; 3], rhs: [i64; 3]) -> [i64; 3] {
+            let output = {
+                let mut result = lhs;
+                for (result_item, rhs_item) in result.iter_mut().zip(rhs.iter()) {
+                    *result_item = if (*result_item != 0) ^ (*rhs_item != 0) {
+                        1i64
+                    } else {
+                        0i64
+                    };
+                }
+                result
+            };
+            output
+        }
+        ");
+    }
 
     #[test]
     fn test_xor_forward() {

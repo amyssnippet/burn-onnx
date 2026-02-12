@@ -6,6 +6,7 @@ include_models!(
     where_op_scalar_x,
     where_op_scalar_y,
     where_op_all_scalar,
+    where_scalar_xy,
     where_shape_all_shapes,
     where_shape_scalar_cond,
     where_shapes_from_inputs,
@@ -93,6 +94,24 @@ mod tests {
         let expected = 1.0f32;
 
         assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn where_scalar_xy() {
+        // Regression test: tensor condition with both x and y as scalar constants.
+        // The condition tensor is larger than the scalar-derived [1,1] tensor,
+        // so mask_fill must expand y before applying the mask.
+        let device = Default::default();
+        let model: where_scalar_xy::Model<TestBackend> = where_scalar_xy::Model::new(&device);
+
+        let condition =
+            Tensor::from_bool([[true, false, true], [false, true, false]].into(), &device);
+
+        let output = model.forward(condition);
+        // Where(cond, -1.0, 0.0): -1.0 where true, 0.0 where false
+        let expected = TensorData::from([[-1.0f32, 0.0, -1.0], [0.0, -1.0, 0.0]]);
+
+        output.to_data().assert_eq(&expected, true);
     }
 
     #[test]

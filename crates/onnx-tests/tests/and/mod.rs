@@ -1,6 +1,6 @@
 // Import the shared macro
 use crate::include_models;
-include_models!(and, and_scalar, and_broadcast);
+include_models!(and, and_scalar, and_scalar_tensor, and_broadcast);
 
 #[cfg(test)]
 mod tests {
@@ -40,6 +40,23 @@ mod tests {
         assert_eq!(model.forward(false, true), false);
         assert_eq!(model.forward(true, false), false);
         assert_eq!(model.forward(true, true), false); // true && false = false
+    }
+
+    #[test]
+    fn and_scalar_tensor() {
+        let device = Default::default();
+        let model: and_scalar_tensor::Model<TestBackend> = and_scalar_tensor::Model::new(&device);
+
+        let input = Tensor::<TestBackend, 2, Bool>::from_bool(
+            TensorData::from([[true, false, true], [false, true, false]]),
+            &device,
+        );
+
+        // And(true, input) should equal input
+        let output = model.forward(input.clone()).to_data();
+        let expected = input.to_data();
+
+        output.assert_eq(&expected, true);
     }
 
     #[test]

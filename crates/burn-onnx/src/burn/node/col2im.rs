@@ -1,6 +1,5 @@
 use super::prelude::*;
 
-
 impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
     fn inputs(&self) -> &[Argument] {
         &self.inputs
@@ -21,7 +20,7 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
         let pads = &self.config.pads;
 
         let num_spatial_dims = image_shape.len();
-        
+
         // Split pads into begin/end
         let pads_begin: Vec<usize> = pads[..num_spatial_dims].to_vec();
         let pads_end: Vec<usize> = pads[num_spatial_dims..].to_vec();
@@ -41,7 +40,7 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
                     + 1
             })
             .collect();
-            
+
         let total_windows: usize = output_counts.iter().product();
         let block_product: usize = block_shape.iter().product();
         let total_input_elements = block_product * total_windows;
@@ -50,7 +49,7 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
         let padded_dims: Vec<usize> = (0..num_spatial_dims)
             .map(|i| image_shape[i] + pads_begin[i] + pads_end[i])
             .collect();
-        
+
         // Calculate the linear indices for scatter-add
         // We compute where each element of the input (flattened block * windows) goes in the flattened padded output.
         // Input layout: [Batch, Channel, BlockElements, Windows] -> Flattened last 2 dims: [BlockElements, Windows]
@@ -61,47 +60,47 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
         // So iterate block_elem outer, window inner? No, Burn/Numpy default layout is standard (last dim contiguous).
         // So [d0, d1, d2, d3] -> [d0, d1, d2*d3] means d3 is the fastest changing index.
         // So index = block_idx * total_windows + window_idx
-        
+
         // BUT, Col2Im input is usually [N, C*BlockProd, L] in ONNX spec.
         // My onnx-ir says: "Input data tensor from Im2Col, shape [N, C * product(block_shape), L]"
         // So we interpret it as [N, C, BlockProd, L] for reshaping purposes (logic in type inference confirms this).
         // So element at index `i` in flattened spatial dim corresponds to:
         //   block_idx = i / total_windows
         //   window_idx = i % total_windows
-        
+
         let mut scatter_indices = vec![0i64; total_input_elements];
-        
+
         for i in 0..total_input_elements {
             let block_idx = i / total_windows;
             let window_idx = i % total_windows;
-            
+
             // Reconstruct spatial positions from window_idx and block_idx
             // General N-D logic
             let mut w_rem = window_idx;
             let mut b_rem = block_idx;
-            
+
             let mut flat_output_index = 0;
             let mut stride_accumulator = 1;
-            
+
             // Iterate dimensions backwards (W then H) for standard layout
             for dim in (0..num_spatial_dims).rev() {
                 // Window position in this dimension
                 let w_pos = w_rem % output_counts[dim];
                 w_rem /= output_counts[dim];
-                
+
                 // Block offset in this dimension
                 let b_pos = b_rem % block_shape[dim];
                 b_rem /= block_shape[dim];
-                
+
                 // Calculate position in Padded Output
                 // pos = w_pos * stride + b_pos * dilation
                 let pad_pos = w_pos * strides[dim] + b_pos * dilations[dim];
-                
+
                 // Add to flat index
                 flat_output_index += pad_pos * stride_accumulator;
                 stride_accumulator *= padded_dims[dim];
             }
-            
+
             scatter_indices[i] = flat_output_index as i64;
         }
 
@@ -110,44 +109,44 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
         let indices_tokens = quote! {
             TensorData::from(&[#(#scatter_indices),*] as &[i64])
         };
-        
+
         let padded_size: usize = padded_dims.iter().product();
 
         // 6. Slice instructions to crop padding
         // canvas.slice([0..N, 0..C, pad_h..pad_h+H, pad_w..pad_w+W])
         // Since we flatten spatial dims for scatter, we need to reshape back to spatial before slicing.
-        
+
         // Padded shape for reshape
         let padded_shape_tokens = match num_spatial_dims {
             1 => quote! { [batch_size, channels, #padded_size] },
             2 => {
-                 let h_pad = padded_dims[0];
-                 let w_pad = padded_dims[1];
-                 quote! { [batch_size, channels, #h_pad, #w_pad] }
-            },
-             _ => panic!("Unsupported dimensions"),
+                let h_pad = padded_dims[0];
+                let w_pad = padded_dims[1];
+                quote! { [batch_size, channels, #h_pad, #w_pad] }
+            }
+            _ => panic!("Unsupported dimensions"),
         };
 
         // Crop slices
         let slice_ranges = match num_spatial_dims {
-             1 => {
-                 let p_begin = pads_begin[0];
-                 let shape = image_shape[0];
-                 let end = p_begin + shape;
-                 quote! { [0..batch_size, 0..channels, #p_begin..#end] }
-             },
-             2 => {
-                 let h_begin = pads_begin[0];
-                 let h_shape = image_shape[0];
-                 let h_end = h_begin + h_shape;
-                 
-                 let w_begin = pads_begin[1];
-                 let w_shape = image_shape[1];
-                 let w_end = w_begin + w_shape;
-                 
-                 quote! { [0..batch_size, 0..channels, #h_begin..#h_end, #w_begin..#w_end] }
-             },
-             _ => panic!("Unsupported dimensions"),
+            1 => {
+                let p_begin = pads_begin[0];
+                let shape = image_shape[0];
+                let end = p_begin + shape;
+                quote! { [0..batch_size, 0..channels, #p_begin..#end] }
+            }
+            2 => {
+                let h_begin = pads_begin[0];
+                let h_shape = image_shape[0];
+                let h_end = h_begin + h_shape;
+
+                let w_begin = pads_begin[1];
+                let w_shape = image_shape[1];
+                let w_end = w_begin + w_shape;
+
+                quote! { [0..batch_size, 0..channels, #h_begin..#h_end, #w_begin..#w_end] }
+            }
+            _ => panic!("Unsupported dimensions"),
         };
 
         // Output image shape for result (validation/verification)
@@ -180,7 +179,7 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
 
                 // 6. Reshape to Padded Spatial and Crop
                 let canvas = canvas.reshape(#padded_shape_tokens);
-                
+
                 canvas.slice(#slice_ranges)
             };
         }
@@ -309,7 +308,7 @@ mod tests {
         }
         "###);
     }
-    
+
     #[test]
     fn test_col2im_2d_with_padding() {
         let config = Col2ImConfig::new(
@@ -593,7 +592,7 @@ mod tests {
         }
         "###);
     }
-    
+
     #[test]
     fn test_col2im_2d_with_dilation() {
         let config = Col2ImConfig::new(

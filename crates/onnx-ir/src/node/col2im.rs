@@ -89,7 +89,6 @@ impl NodeProcessor for Col2ImProcessor {
     ) -> Result<(), ProcessError> {
         // Validate attributes
 
-
         // Validate data input is a tensor
         let tensor = match &node.inputs[0].ty {
             ArgType::Tensor(tensor) => tensor,
@@ -123,9 +122,9 @@ impl NodeProcessor for Col2ImProcessor {
         // We know (N, C, *image_shape) structure.
         let static_shape = if let Some(input_shape) = &tensor.static_shape {
             // Full inference if input shape is fully known
-            let n = input_shape[0]; 
+            let n = input_shape[0];
             let block_product: usize = config.block_shape.iter().product();
-            let c = input_shape[1].map(|v| v / block_product); 
+            let c = input_shape[1].map(|v| v / block_product);
 
             let mut shape = vec![n, c];
             for &dim in &config.image_shape {
@@ -133,17 +132,17 @@ impl NodeProcessor for Col2ImProcessor {
             }
             Some(shape)
         } else {
-             // Partial inference: N, C unknown, but spatial dims known from config
-             let mut shape = vec![None, None]; // N, C
-             for &dim in &config.image_shape {
-                 shape.push(Some(dim));
-             }
-             Some(shape)
+            // Partial inference: N, C unknown, but spatial dims known from config
+            let mut shape = vec![None, None]; // N, C
+            for &dim in &config.image_shape {
+                shape.push(Some(dim));
+            }
+            Some(shape)
         };
 
         // Validate supported dimensions (only 1D and 2D supported by current codegen)
         if num_spatial_dims > 2 {
-             return Err(ProcessError::Custom(format!(
+            return Err(ProcessError::Custom(format!(
                 "Col2Im currently only supports 1D and 2D spatial dimensions, got {}",
                 num_spatial_dims
             )));
@@ -430,7 +429,9 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(ProcessError::Custom(msg)) => {
-                assert!(msg.contains("Col2Im currently only supports 1D and 2D spatial dimensions"));
+                assert!(
+                    msg.contains("Col2Im currently only supports 1D and 2D spatial dimensions")
+                );
             }
             _ => panic!("Expected Custom ProcessError, got {:?}", result),
         }

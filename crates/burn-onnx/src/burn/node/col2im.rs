@@ -61,7 +61,14 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
             let pad_w_begin = pads_begin[1];
             let out_w = output_counts[1];
 
-            let check_body = if pad_h_begin == 0 && pad_w_begin == 0 {
+            let pad_h_end = pads_end[0];
+            let pad_w_end = pads_end[1];
+
+            let check_body = if pad_h_begin == 0
+                && pad_w_begin == 0
+                && pad_h_end == 0
+                && pad_w_end == 0
+            {
                 // Optimized check for zero padding
                 quote! {
                     if h_idx < #img_h && w_idx < #img_w {
@@ -319,6 +326,40 @@ mod tests {
         let node = Col2ImNodeBuilder::new("col2im3")
             .input_tensor("input", 3, DType::F32)
             .output_tensor("output", 3, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code);
+    }
+    #[test]
+    fn test_col2im_1d_with_padding() {
+        let config = Col2ImConfig::new(
+            vec![10],   // image_shape
+            vec![3],    // block_shape
+            vec![1],    // dilations
+            vec![1, 1], // pads [begin, end]
+            vec![1],    // strides
+        );
+        let node = Col2ImNodeBuilder::new("col2im4")
+            .input_tensor("input", 3, DType::F32)
+            .output_tensor("output", 3, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code);
+    }
+    #[test]
+    fn test_col2im_2d_with_end_padding() {
+        let config = Col2ImConfig::new(
+            vec![5, 5],       // image_shape
+            vec![2, 2],       // block_shape
+            vec![1, 1],       // dilations
+            vec![0, 0, 1, 1], // pads [t, l, b, r] - only end padding
+            vec![1, 1],       // strides
+        );
+        let node = Col2ImNodeBuilder::new("col2im_end_pad")
+            .input_tensor("input", 3, DType::F32)
+            .output_tensor("output", 4, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);

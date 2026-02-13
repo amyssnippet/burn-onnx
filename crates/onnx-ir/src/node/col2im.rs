@@ -8,9 +8,6 @@
 //! ## Opset Versions
 //! - **Opset 18**: Initial version
 //!
-//! ## Opset Versions
-//! - **Opset 18**: Initial version
-//!
 //! ## Extensions
 //! - **1D Support**: The ONNX specification requires `image_shape` and `block_shape` to be at least 2D.
 //!   This implementation extends support to 1D `image_shape` and `block_shape` as well.
@@ -72,11 +69,11 @@ impl NodeProcessor for Col2ImProcessor {
 
     fn lift_constants(&self, node: &mut RawNode, _opset: usize) -> Result<(), ProcessError> {
         // Lift image_shape (input[1]) if constant
-        if node.inputs.len() > 1 && node.inputs[1].is_constant() {
+        if node.inputs[1].is_constant() {
             node.inputs[1].to_static()?;
         }
         // Lift block_shape (input[2]) if constant
-        if node.inputs.len() > 2 && node.inputs[2].is_constant() {
+        if node.inputs[2].is_constant() {
             node.inputs[2].to_static()?;
         }
         Ok(())
@@ -191,7 +188,6 @@ impl NodeProcessor for Col2ImProcessor {
         let num_spatial_dims = image_shape.len();
 
         // Note: ONNX spec requires num_spatial_dims >= 2, but we support 1D as an extension.
-
 
         // Extract dilations attribute (default: all 1s)
         let dilations = node

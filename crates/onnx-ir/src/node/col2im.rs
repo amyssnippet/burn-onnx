@@ -8,8 +8,13 @@
 //! ## Opset Versions
 //! - **Opset 18**: Initial version
 //!
-//! ## Inputs
-//! - `input` (T): Input data tensor from Im2Col, shape [N, C * product(block_shape), L]
+//! ## Opset Versions
+//! - **Opset 18**: Initial version
+//!
+//! ## Extensions
+//! - **1D Support**: The ONNX specification requires `image_shape` and `block_shape` to be at least 2D.
+//!   This implementation extends support to 1D `image_shape` and `block_shape` as well.
+//!
 //! - `image_shape` (tensor(int64)): The shape of the spatial dimensions of the image
 //! - `block_shape` (tensor(int64)): The shape of the block to apply on the image
 //!
@@ -184,6 +189,9 @@ impl NodeProcessor for Col2ImProcessor {
         };
 
         let num_spatial_dims = image_shape.len();
+
+        // Note: ONNX spec requires num_spatial_dims >= 2, but we support 1D as an extension.
+
 
         // Extract dilations attribute (default: all 1s)
         let dilations = node

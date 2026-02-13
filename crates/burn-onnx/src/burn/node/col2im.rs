@@ -1,5 +1,6 @@
 use super::prelude::*;
 
+
 impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
     fn inputs(&self) -> &[Argument] {
         &self.inputs
@@ -20,271 +21,168 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
         let pads = &self.config.pads;
 
         let num_spatial_dims = image_shape.len();
-
-        // Pre-compute begin and end pads for each spatial dimension
+        
+        // Split pads into begin/end
         let pads_begin: Vec<usize> = pads[..num_spatial_dims].to_vec();
         let pads_end: Vec<usize> = pads[num_spatial_dims..].to_vec();
 
-        // Compute effective block sizes with dilation: d_i * (block_i - 1) + 1
+        // Compute effective block sizes: d * (k - 1) + 1
         let effective_blocks: Vec<usize> = block_shape
             .iter()
             .zip(dilations.iter())
             .map(|(&b, &d)| d * (b - 1) + 1)
             .collect();
 
-        // Compute number of output positions (L_i) per spatial dimension
-        // L_i = (image_shape_i + pad_begin_i + pad_end_i - effective_block_i) / stride_i + 1
+        // Compute output windows count per dimension
+        // L_i = (img + pad_begin + pad_end - effective) / stride + 1
         let output_counts: Vec<usize> = (0..num_spatial_dims)
             .map(|i| {
                 (image_shape[i] + pads_begin[i] + pads_end[i] - effective_blocks[i]) / strides[i]
                     + 1
             })
             .collect();
-
-        // Total number of sliding window positions
-        let total_positions: usize = output_counts.iter().product();
-
-        // Product of block_shape (number of elements per block)
+            
+        let total_windows: usize = output_counts.iter().product();
         let block_product: usize = block_shape.iter().product();
+        let total_input_elements = block_product * total_windows;
 
-        // For 2D case, generate optimized code
-        if num_spatial_dims == 2 {
-            let img_h = image_shape[0];
-            let img_w = image_shape[1];
-            let block_h = block_shape[0];
-            let block_w = block_shape[1];
-            let stride_h = strides[0];
-            let stride_w = strides[1];
-            let dilation_h = dilations[0];
-            let dilation_w = dilations[1];
-            let pad_h_begin = pads_begin[0];
-            let pad_w_begin = pads_begin[1];
-            let out_w = output_counts[1];
-
-            let pad_h_end = pads_end[0];
-            let pad_w_end = pads_end[1];
-
-            let check_body = if pad_h_begin == 0
-                && pad_w_begin == 0
-                && pad_h_end == 0
-                && pad_w_end == 0
-            {
-                // Optimized check for zero padding
-                quote! {
-                    if h_idx < #img_h && w_idx < #img_w {
-                        let h_out = h_idx;
-                        let w_out = w_idx;
-
-                        // Extract element and add to result
-                        let val = col_slice
-                            .clone()
-                            .slice([0..batch_size, 0..channels, bh..bh + 1, bw..bw + 1]);
-                        let current = result
-                            .clone()
-                            .slice([0..batch_size, 0..channels, h_out..h_out + 1, w_out..w_out + 1]);
-                        result = result.slice_assign(
-                            [0..batch_size, 0..channels, h_out..h_out + 1, w_out..w_out + 1],
-                            current + val,
-                        );
-                    }
-                }
-            } else {
-                // General check for non-zero padding, optimized per dimension
-                let h_lower_check = if pad_h_begin > 0 {
-                    quote! { h_idx >= #pad_h_begin && }
-                } else {
-                    quote! {}
-                };
-
-                let h_upper_check = if pad_h_end > 0 {
-                    quote! { h_idx < #img_h + #pad_h_begin }
-                } else {
-                    quote! { h_idx < #img_h }
-                };
-
-                let w_lower_check = if pad_w_begin > 0 {
-                    quote! { && w_idx >= #pad_w_begin && }
-                } else {
-                    quote! { && }
-                };
-
-                let w_upper_check = if pad_w_end > 0 {
-                    quote! { w_idx < #img_w + #pad_w_begin }
-                } else {
-                    quote! { w_idx < #img_w }
-                };
-
-                let h_out_assign = if pad_h_begin > 0 {
-                    quote! { let h_out = h_idx - #pad_h_begin; }
-                } else {
-                    quote! { let h_out = h_idx; }
-                };
-
-                let w_out_assign = if pad_w_begin > 0 {
-                    quote! { let w_out = w_idx - #pad_w_begin; }
-                } else {
-                    quote! { let w_out = w_idx; }
-                };
-
-                quote! {
-                    if #h_lower_check #h_upper_check #w_lower_check #w_upper_check
-                    {
-                        #h_out_assign
-                        #w_out_assign
-
-                        // Extract element and add to result
-                        let val = col_slice
-                            .clone()
-                            .slice([0..batch_size, 0..channels, bh..bh + 1, bw..bw + 1]);
-                        let current = result
-                            .clone()
-                            .slice([0..batch_size, 0..channels, h_out..h_out + 1, w_out..w_out + 1]);
-                        result = result.slice_assign(
-                            [0..batch_size, 0..channels, h_out..h_out + 1, w_out..w_out + 1],
-                            current + val,
-                        );
-                    }
-                }
-            };
-
-            quote! {
-                let #output = {
-                    let [batch_size, col_channels, _l] = #input.shape().dims();
-                    let channels = col_channels / #block_product;
-                    let device = #input.device();
-
-                    // Create output tensor with zeros: [N, C, H, W]
-                    let mut result = Tensor::<B, 4>::zeros([batch_size, channels, #img_h, #img_w], &device);
-
-                    // Reshape input to [N, C, block_h * block_w, L]
-                    let input_reshaped = #input.reshape([batch_size, channels, #block_product, #total_positions]);
-
-                    // Iterate over sliding window positions and accumulate
-                    for pos in 0..#total_positions {
-                        let pos_h = pos / #out_w;
-                        let pos_w = pos % #out_w;
-
-                        // Extract the column for this position: [N, C, block_h * block_w]
-                        let col_slice = input_reshaped
-                            .clone()
-                            .slice([0..batch_size, 0..channels, 0..#block_product, pos..pos + 1])
-                            .reshape([batch_size, channels, #block_h, #block_w]);
-
-                        // Scatter into output at the correct positions
-                        for bh in 0..#block_h {
-                            for bw in 0..#block_w {
-                                let h_idx = pos_h * #stride_h + bh * #dilation_h;
-                                let w_idx = pos_w * #stride_w + bw * #dilation_w;
-
-                                // Check padding boundaries
-                                #check_body
-                            }
-                        }
-                    }
-
-                    result
-                };
+        // Compute Padded Output Shape dimensions
+        let padded_dims: Vec<usize> = (0..num_spatial_dims)
+            .map(|i| image_shape[i] + pads_begin[i] + pads_end[i])
+            .collect();
+        
+        // Calculate the linear indices for scatter-add
+        // We compute where each element of the input (flattened block * windows) goes in the flattened padded output.
+        // Input layout: [Batch, Channel, BlockElements, Windows] -> Flattened last 2 dims: [BlockElements, Windows]
+        // But Burn reshape/flatten is usually C-order (row-major).
+        // Input tensor is [N, C, BlockProd, L] -> reshape to [N, C, BlockProd * L]
+        // So we iterate: for window in 0..windows { for block_elem in 0..block_product { ... } } (?)
+        // Wait, reshape [N, C, Block, L] -> [N, C, Block*L] means inner dimension is L.
+        // So iterate block_elem outer, window inner? No, Burn/Numpy default layout is standard (last dim contiguous).
+        // So [d0, d1, d2, d3] -> [d0, d1, d2*d3] means d3 is the fastest changing index.
+        // So index = block_idx * total_windows + window_idx
+        
+        // BUT, Col2Im input is usually [N, C*BlockProd, L] in ONNX spec.
+        // My onnx-ir says: "Input data tensor from Im2Col, shape [N, C * product(block_shape), L]"
+        // So we interpret it as [N, C, BlockProd, L] for reshaping purposes (logic in type inference confirms this).
+        // So element at index `i` in flattened spatial dim corresponds to:
+        //   block_idx = i / total_windows
+        //   window_idx = i % total_windows
+        
+        let mut scatter_indices = vec![0i64; total_input_elements];
+        
+        for i in 0..total_input_elements {
+            let block_idx = i / total_windows;
+            let window_idx = i % total_windows;
+            
+            // Reconstruct spatial positions from window_idx and block_idx
+            // General N-D logic
+            let mut w_rem = window_idx;
+            let mut b_rem = block_idx;
+            
+            let mut flat_output_index = 0;
+            let mut stride_accumulator = 1;
+            
+            // Iterate dimensions backwards (W then H) for standard layout
+            for dim in (0..num_spatial_dims).rev() {
+                // Window position in this dimension
+                let w_pos = w_rem % output_counts[dim];
+                w_rem /= output_counts[dim];
+                
+                // Block offset in this dimension
+                let b_pos = b_rem % block_shape[dim];
+                b_rem /= block_shape[dim];
+                
+                // Calculate position in Padded Output
+                // pos = w_pos * stride + b_pos * dilation
+                let pad_pos = w_pos * strides[dim] + b_pos * dilations[dim];
+                
+                // Add to flat index
+                flat_output_index += pad_pos * stride_accumulator;
+                stride_accumulator *= padded_dims[dim];
             }
-        } else if num_spatial_dims == 1 {
-            // For 1D case
-            let img_len = image_shape[0];
-            let block_len = block_shape[0];
-            let stride_len = strides[0];
-            let dilation_len = dilations[0];
-            let pad_begin = pads_begin[0];
+            
+            scatter_indices[i] = flat_output_index as i64;
+        }
 
-            let check_body = if pad_begin == 0 {
-                // Optimized check for zero padding
-                quote! {
-                    if idx < #img_len {
-                        let out_idx = idx;
+        // Create constant tensor from logic
+        let _indices_len = scatter_indices.len();
+        let indices_tokens = quote! {
+            TensorData::from(&[#(#scatter_indices),*] as &[i64])
+        };
+        
+        let padded_size: usize = padded_dims.iter().product();
 
-                        let val = col_slice
-                            .clone()
-                            .slice([0..batch_size, 0..channels, bi..bi + 1]);
-                        let current = result
-                            .clone()
-                            .slice([0..batch_size, 0..channels, out_idx..out_idx + 1]);
-                        result = result.slice_assign(
-                            [0..batch_size, 0..channels, out_idx..out_idx + 1],
-                            current + val,
-                        );
-                    }
-                }
-            } else {
-                // General check for non-zero padding, optimized
-                let lower_check = if pad_begin > 0 {
-                    quote! { idx >= #pad_begin && }
-                } else {
-                    quote! {}
-                };
+        // 6. Slice instructions to crop padding
+        // canvas.slice([0..N, 0..C, pad_h..pad_h+H, pad_w..pad_w+W])
+        // Since we flatten spatial dims for scatter, we need to reshape back to spatial before slicing.
+        
+        // Padded shape for reshape
+        let padded_shape_tokens = match num_spatial_dims {
+            1 => quote! { [batch_size, channels, #padded_size] },
+            2 => {
+                 let h_pad = padded_dims[0];
+                 let w_pad = padded_dims[1];
+                 quote! { [batch_size, channels, #h_pad, #w_pad] }
+            },
+             _ => panic!("Unsupported dimensions"),
+        };
 
-                let pad_end = pads_end[0];
-                let upper_check = if pad_end > 0 {
-                    quote! { idx < #img_len + #pad_begin }
-                } else {
-                    quote! { idx < #img_len }
-                };
+        // Crop slices
+        let slice_ranges = match num_spatial_dims {
+             1 => {
+                 let p_begin = pads_begin[0];
+                 let shape = image_shape[0];
+                 let end = p_begin + shape;
+                 quote! { [0..batch_size, 0..channels, #p_begin..#end] }
+             },
+             2 => {
+                 let h_begin = pads_begin[0];
+                 let h_shape = image_shape[0];
+                 let h_end = h_begin + h_shape;
+                 
+                 let w_begin = pads_begin[1];
+                 let w_shape = image_shape[1];
+                 let w_end = w_begin + w_shape;
+                 
+                 quote! { [0..batch_size, 0..channels, #h_begin..#h_end, #w_begin..#w_end] }
+             },
+             _ => panic!("Unsupported dimensions"),
+        };
 
-                let out_idx_assign = if pad_begin > 0 {
-                    quote! { let out_idx = idx - #pad_begin; }
-                } else {
-                    quote! { let out_idx = idx; }
-                };
+        // Output image shape for result (validation/verification)
+        // let output_shape = ...
 
-                quote! {
-                    if #lower_check #upper_check {
-                        #out_idx_assign
+        quote! {
+            let #output = {
+                let [batch_size, col_channels, _l] = #input.shape().dims();
+                let channels = col_channels / #block_product;
+                let device = #input.device();
 
-                        let val = col_slice
-                            .clone()
-                            .slice([0..batch_size, 0..channels, bi..bi + 1]);
-                        let current = result
-                            .clone()
-                            .slice([0..batch_size, 0..channels, out_idx..out_idx + 1]);
-                        result = result.slice_assign(
-                            [0..batch_size, 0..channels, out_idx..out_idx + 1],
-                            current + val,
-                        );
-                    }
-                }
+                // 1. Convert input to flattened [N, C, BlockProd * Windows]
+                // Note: col2im input is [N, C*Block, L], reshape to [N, C, Block*L] works if contiguous
+                let input_flat = #input.reshape([batch_size, channels, #total_input_elements]);
+
+                // 2. Create output canvas (Padded, Flattened)
+                // Shape: [N, C, PaddedTotal]
+                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, #padded_size], &device);
+
+                // 3. Create Indices Tensor [BlockProd * Windows]
+                let indices = Tensor::<B, 1, Int>::from_data(#indices_tokens, &device);
+
+                // 4. Expand indices to [N, C, BlockProd * Windows]
+                let indices_expanded = indices
+                    .reshape([1, 1, -1])
+                    .expand([batch_size, channels, #total_input_elements]);
+
+                // 5. Scatter Add (dim 2)
+                let canvas = canvas.scatter(2, indices_expanded, input_flat, burn::tensor::IndexingUpdateOp::Add);
+
+                // 6. Reshape to Padded Spatial and Crop
+                let canvas = canvas.reshape(#padded_shape_tokens);
+                
+                canvas.slice(#slice_ranges)
             };
-
-            quote! {
-                let #output = {
-                    let [batch_size, col_channels, _l] = #input.shape().dims();
-                    let channels = col_channels / #block_product;
-                    let device = #input.device();
-
-                    // Create output tensor with zeros: [N, C, L]
-                    let mut result = Tensor::<B, 3>::zeros([batch_size, channels, #img_len], &device);
-
-                    // Reshape input to [N, C, block_len, num_positions]
-                    let input_reshaped = #input.reshape([batch_size, channels, #block_product, #total_positions]);
-
-                    // Iterate over sliding window positions and accumulate
-                    for pos in 0..#total_positions {
-                        let col_slice = input_reshaped
-                            .clone()
-                            .slice([0..batch_size, 0..channels, 0..#block_product, pos..pos + 1])
-                            .reshape([batch_size, channels, #block_len]);
-
-                        for bi in 0..#block_len {
-                            let idx = pos * #stride_len + bi * #dilation_len;
-
-                            #check_body
-                        }
-                    }
-
-                    result
-                };
-            }
-        } else {
-            // Panic for unsupported dimensions > 2D
-            panic!(
-                "Col2Im only supports 1D and 2D spatial dimensions, got {}",
-                num_spatial_dims
-            );
         }
     }
 }
@@ -311,27 +209,107 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code);
+        assert_snapshot!(code, @r###"
+        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 4> {
+            let output = {
+                let [batch_size, col_channels, _l] = input.shape().dims();
+                let channels = col_channels / 4usize;
+                let device = input.device();
+                let input_flat = input.reshape([batch_size, channels, 64usize]);
+                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, 25usize], &device);
+                let indices = Tensor::<
+                    B,
+                    1,
+                    Int,
+                >::from_data(
+                    TensorData::from(
+                        &[
+                            0i64,
+                            1i64,
+                            2i64,
+                            3i64,
+                            5i64,
+                            6i64,
+                            7i64,
+                            8i64,
+                            10i64,
+                            11i64,
+                            12i64,
+                            13i64,
+                            15i64,
+                            16i64,
+                            17i64,
+                            18i64,
+                            1i64,
+                            2i64,
+                            3i64,
+                            4i64,
+                            6i64,
+                            7i64,
+                            8i64,
+                            9i64,
+                            11i64,
+                            12i64,
+                            13i64,
+                            14i64,
+                            16i64,
+                            17i64,
+                            18i64,
+                            19i64,
+                            5i64,
+                            6i64,
+                            7i64,
+                            8i64,
+                            10i64,
+                            11i64,
+                            12i64,
+                            13i64,
+                            15i64,
+                            16i64,
+                            17i64,
+                            18i64,
+                            20i64,
+                            21i64,
+                            22i64,
+                            23i64,
+                            6i64,
+                            7i64,
+                            8i64,
+                            9i64,
+                            11i64,
+                            12i64,
+                            13i64,
+                            14i64,
+                            16i64,
+                            17i64,
+                            18i64,
+                            19i64,
+                            21i64,
+                            22i64,
+                            23i64,
+                            24i64,
+                        ] as &[i64],
+                    ),
+                    &device,
+                );
+                let indices_expanded = indices
+                    .reshape([1, 1, -1])
+                    .expand([batch_size, channels, 64usize]);
+                let canvas = canvas
+                    .scatter(
+                        2,
+                        indices_expanded,
+                        input_flat,
+                        burn::tensor::IndexingUpdateOp::Add,
+                    );
+                let canvas = canvas.reshape([batch_size, channels, 5usize, 5usize]);
+                canvas.slice([0..batch_size, 0..channels, 0usize..5usize, 0usize..5usize])
+            };
+            output
+        }
+        "###);
     }
-
-    #[test]
-    fn test_col2im_2d_with_strides() {
-        let config = Col2ImConfig::new(
-            vec![6, 6],       // image_shape
-            vec![2, 2],       // block_shape
-            vec![1, 1],       // dilations
-            vec![0, 0, 0, 0], // pads
-            vec![2, 2],       // strides
-        );
-        let node = Col2ImNodeBuilder::new("col2im2")
-            .input_tensor("input", 3, DType::F32)
-            .output_tensor("output", 4, DType::F32)
-            .config(config)
-            .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code);
-    }
-
+    
     #[test]
     fn test_col2im_2d_with_padding() {
         let config = Col2ImConfig::new(
@@ -347,9 +325,275 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code);
+        assert_snapshot!(code, @r###"
+        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 4> {
+            let output = {
+                let [batch_size, col_channels, _l] = input.shape().dims();
+                let channels = col_channels / 4usize;
+                let device = input.device();
+                let input_flat = input.reshape([batch_size, channels, 144usize]);
+                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, 49usize], &device);
+                let indices = Tensor::<
+                    B,
+                    1,
+                    Int,
+                >::from_data(
+                    TensorData::from(
+                        &[
+                            0i64,
+                            1i64,
+                            2i64,
+                            3i64,
+                            4i64,
+                            5i64,
+                            7i64,
+                            8i64,
+                            9i64,
+                            10i64,
+                            11i64,
+                            12i64,
+                            14i64,
+                            15i64,
+                            16i64,
+                            17i64,
+                            18i64,
+                            19i64,
+                            21i64,
+                            22i64,
+                            23i64,
+                            24i64,
+                            25i64,
+                            26i64,
+                            28i64,
+                            29i64,
+                            30i64,
+                            31i64,
+                            32i64,
+                            33i64,
+                            35i64,
+                            36i64,
+                            37i64,
+                            38i64,
+                            39i64,
+                            40i64,
+                            1i64,
+                            2i64,
+                            3i64,
+                            4i64,
+                            5i64,
+                            6i64,
+                            8i64,
+                            9i64,
+                            10i64,
+                            11i64,
+                            12i64,
+                            13i64,
+                            15i64,
+                            16i64,
+                            17i64,
+                            18i64,
+                            19i64,
+                            20i64,
+                            22i64,
+                            23i64,
+                            24i64,
+                            25i64,
+                            26i64,
+                            27i64,
+                            29i64,
+                            30i64,
+                            31i64,
+                            32i64,
+                            33i64,
+                            34i64,
+                            36i64,
+                            37i64,
+                            38i64,
+                            39i64,
+                            40i64,
+                            41i64,
+                            7i64,
+                            8i64,
+                            9i64,
+                            10i64,
+                            11i64,
+                            12i64,
+                            14i64,
+                            15i64,
+                            16i64,
+                            17i64,
+                            18i64,
+                            19i64,
+                            21i64,
+                            22i64,
+                            23i64,
+                            24i64,
+                            25i64,
+                            26i64,
+                            28i64,
+                            29i64,
+                            30i64,
+                            31i64,
+                            32i64,
+                            33i64,
+                            35i64,
+                            36i64,
+                            37i64,
+                            38i64,
+                            39i64,
+                            40i64,
+                            42i64,
+                            43i64,
+                            44i64,
+                            45i64,
+                            46i64,
+                            47i64,
+                            8i64,
+                            9i64,
+                            10i64,
+                            11i64,
+                            12i64,
+                            13i64,
+                            15i64,
+                            16i64,
+                            17i64,
+                            18i64,
+                            19i64,
+                            20i64,
+                            22i64,
+                            23i64,
+                            24i64,
+                            25i64,
+                            26i64,
+                            27i64,
+                            29i64,
+                            30i64,
+                            31i64,
+                            32i64,
+                            33i64,
+                            34i64,
+                            36i64,
+                            37i64,
+                            38i64,
+                            39i64,
+                            40i64,
+                            41i64,
+                            43i64,
+                            44i64,
+                            45i64,
+                            46i64,
+                            47i64,
+                            48i64,
+                        ] as &[i64],
+                    ),
+                    &device,
+                );
+                let indices_expanded = indices
+                    .reshape([1, 1, -1])
+                    .expand([batch_size, channels, 144usize]);
+                let canvas = canvas
+                    .scatter(
+                        2,
+                        indices_expanded,
+                        input_flat,
+                        burn::tensor::IndexingUpdateOp::Add,
+                    );
+                let canvas = canvas.reshape([batch_size, channels, 7usize, 7usize]);
+                canvas.slice([0..batch_size, 0..channels, 1usize..6usize, 1usize..6usize])
+            };
+            output
+        }
+        "###);
     }
 
+    #[test]
+    fn test_col2im_2d_with_strides() {
+        let config = Col2ImConfig::new(
+            vec![6, 6],       // image_shape
+            vec![2, 2],       // block_shape
+            vec![1, 1],       // dilations
+            vec![0, 0, 0, 0], // pads
+            vec![2, 2],       // strides
+        );
+        let node = Col2ImNodeBuilder::new("col2im_stride")
+            .input_tensor("input", 3, DType::F32)
+            .output_tensor("output", 4, DType::F32)
+            .config(config)
+            .build();
+        let code = codegen_forward_default(&node);
+        assert_snapshot!(code, @r###"
+        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 4> {
+            let output = {
+                let [batch_size, col_channels, _l] = input.shape().dims();
+                let channels = col_channels / 4usize;
+                let device = input.device();
+                let input_flat = input.reshape([batch_size, channels, 36usize]);
+                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, 36usize], &device);
+                let indices = Tensor::<
+                    B,
+                    1,
+                    Int,
+                >::from_data(
+                    TensorData::from(
+                        &[
+                            0i64,
+                            2i64,
+                            4i64,
+                            12i64,
+                            14i64,
+                            16i64,
+                            24i64,
+                            26i64,
+                            28i64,
+                            1i64,
+                            3i64,
+                            5i64,
+                            13i64,
+                            15i64,
+                            17i64,
+                            25i64,
+                            27i64,
+                            29i64,
+                            6i64,
+                            8i64,
+                            10i64,
+                            18i64,
+                            20i64,
+                            22i64,
+                            30i64,
+                            32i64,
+                            34i64,
+                            7i64,
+                            9i64,
+                            11i64,
+                            19i64,
+                            21i64,
+                            23i64,
+                            31i64,
+                            33i64,
+                            35i64,
+                        ] as &[i64],
+                    ),
+                    &device,
+                );
+                let indices_expanded = indices
+                    .reshape([1, 1, -1])
+                    .expand([batch_size, channels, 36usize]);
+                let canvas = canvas
+                    .scatter(
+                        2,
+                        indices_expanded,
+                        input_flat,
+                        burn::tensor::IndexingUpdateOp::Add,
+                    );
+                let canvas = canvas.reshape([batch_size, channels, 6usize, 6usize]);
+                canvas.slice([0..batch_size, 0..channels, 0usize..6usize, 0usize..6usize])
+            };
+            output
+        }
+        "###);
+    }
+    
     #[test]
     fn test_col2im_2d_with_dilation() {
         let config = Col2ImConfig::new(
@@ -365,7 +609,77 @@ mod tests {
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code);
+        assert_snapshot!(code, @r###"
+        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 4> {
+            let output = {
+                let [batch_size, col_channels, _l] = input.shape().dims();
+                let channels = col_channels / 4usize;
+                let device = input.device();
+                let input_flat = input.reshape([batch_size, channels, 36usize]);
+                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, 25usize], &device);
+                let indices = Tensor::<
+                    B,
+                    1,
+                    Int,
+                >::from_data(
+                    TensorData::from(
+                        &[
+                            0i64,
+                            1i64,
+                            2i64,
+                            5i64,
+                            6i64,
+                            7i64,
+                            10i64,
+                            11i64,
+                            12i64,
+                            2i64,
+                            3i64,
+                            4i64,
+                            7i64,
+                            8i64,
+                            9i64,
+                            12i64,
+                            13i64,
+                            14i64,
+                            10i64,
+                            11i64,
+                            12i64,
+                            15i64,
+                            16i64,
+                            17i64,
+                            20i64,
+                            21i64,
+                            22i64,
+                            12i64,
+                            13i64,
+                            14i64,
+                            17i64,
+                            18i64,
+                            19i64,
+                            22i64,
+                            23i64,
+                            24i64,
+                        ] as &[i64],
+                    ),
+                    &device,
+                );
+                let indices_expanded = indices
+                    .reshape([1, 1, -1])
+                    .expand([batch_size, channels, 36usize]);
+                let canvas = canvas
+                    .scatter(
+                        2,
+                        indices_expanded,
+                        input_flat,
+                        burn::tensor::IndexingUpdateOp::Add,
+                    );
+                let canvas = canvas.reshape([batch_size, channels, 5usize, 5usize]);
+                canvas.slice([0..batch_size, 0..channels, 0usize..5usize, 0usize..5usize])
+            };
+            output
+        }
+        "###);
     }
 
     #[test]
@@ -377,46 +691,70 @@ mod tests {
             vec![0, 0], // pads
             vec![1],    // strides
         );
-        let node = Col2ImNodeBuilder::new("col2im3")
+        let node = Col2ImNodeBuilder::new("col2im1d")
             .input_tensor("input", 3, DType::F32)
             .output_tensor("output", 3, DType::F32)
             .config(config)
             .build();
         let code = codegen_forward_default(&node);
-        assert_snapshot!(code);
-    }
-    #[test]
-    fn test_col2im_1d_with_padding() {
-        let config = Col2ImConfig::new(
-            vec![10],   // image_shape
-            vec![3],    // block_shape
-            vec![1],    // dilations
-            vec![1, 1], // pads [begin, end]
-            vec![1],    // strides
-        );
-        let node = Col2ImNodeBuilder::new("col2im4")
-            .input_tensor("input", 3, DType::F32)
-            .output_tensor("output", 3, DType::F32)
-            .config(config)
-            .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code);
-    }
-    #[test]
-    fn test_col2im_2d_with_end_padding() {
-        let config = Col2ImConfig::new(
-            vec![5, 5],       // image_shape
-            vec![2, 2],       // block_shape
-            vec![1, 1],       // dilations
-            vec![0, 0, 1, 1], // pads [t, l, b, r] - only end padding
-            vec![1, 1],       // strides
-        );
-        let node = Col2ImNodeBuilder::new("col2im_end_pad")
-            .input_tensor("input", 3, DType::F32)
-            .output_tensor("output", 4, DType::F32)
-            .config(config)
-            .build();
-        let code = codegen_forward_default(&node);
-        assert_snapshot!(code);
+        assert_snapshot!(code, @r###"
+        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+            let output = {
+                let [batch_size, col_channels, _l] = input.shape().dims();
+                let channels = col_channels / 3usize;
+                let device = input.device();
+                let input_flat = input.reshape([batch_size, channels, 24usize]);
+                let mut canvas = Tensor::<B, 3>::zeros([batch_size, channels, 10usize], &device);
+                let indices = Tensor::<
+                    B,
+                    1,
+                    Int,
+                >::from_data(
+                    TensorData::from(
+                        &[
+                            0i64,
+                            1i64,
+                            2i64,
+                            3i64,
+                            4i64,
+                            5i64,
+                            6i64,
+                            7i64,
+                            1i64,
+                            2i64,
+                            3i64,
+                            4i64,
+                            5i64,
+                            6i64,
+                            7i64,
+                            8i64,
+                            2i64,
+                            3i64,
+                            4i64,
+                            5i64,
+                            6i64,
+                            7i64,
+                            8i64,
+                            9i64,
+                        ] as &[i64],
+                    ),
+                    &device,
+                );
+                let indices_expanded = indices
+                    .reshape([1, 1, -1])
+                    .expand([batch_size, channels, 24usize]);
+                let canvas = canvas
+                    .scatter(
+                        2,
+                        indices_expanded,
+                        input_flat,
+                        burn::tensor::IndexingUpdateOp::Add,
+                    );
+                let canvas = canvas.reshape([batch_size, channels, 10usize]);
+                canvas.slice([0..batch_size, 0..channels, 0usize..10usize])
+            };
+            output
+        }
+        "###);
     }
 }

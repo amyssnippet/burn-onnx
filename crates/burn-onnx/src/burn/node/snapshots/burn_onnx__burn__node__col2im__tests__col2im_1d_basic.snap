@@ -1,6 +1,6 @@
 ---
 source: crates/burn-onnx/src/burn/node/col2im.rs
-assertion_line: 232
+assertion_line: 322
 expression: code
 ---
 pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
@@ -17,8 +17,8 @@ pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
                 .reshape([batch_size, channels, 3usize]);
             for bi in 0..3usize {
                 let idx = pos * 1usize + bi * 1usize;
-                if idx >= 0usize && idx < 10usize + 0usize {
-                    let out_idx = idx - 0usize;
+                if idx < 10usize {
+                    let out_idx = idx;
                     let val = col_slice
                         .clone()
                         .slice([0..batch_size, 0..channels, bi..bi + 1]);

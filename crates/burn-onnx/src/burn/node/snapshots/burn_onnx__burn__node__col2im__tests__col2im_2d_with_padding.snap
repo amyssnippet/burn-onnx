@@ -1,6 +1,6 @@
 ---
 source: crates/burn-onnx/src/burn/node/col2im.rs
-assertion_line: 268
+assertion_line: 286
 expression: code
 ---
 pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 4> {
@@ -11,22 +11,24 @@ pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 4> {
         let mut result = Tensor::<
             B,
             4,
-        >::zeros([batch_size, channels, 6usize, 6usize], &device);
-        let input_reshaped = input.reshape([batch_size, channels, 4usize, 9usize]);
-        for pos in 0..9usize {
-            let pos_h = pos / 3usize;
-            let pos_w = pos % 3usize;
+        >::zeros([batch_size, channels, 5usize, 5usize], &device);
+        let input_reshaped = input.reshape([batch_size, channels, 4usize, 36usize]);
+        for pos in 0..36usize {
+            let pos_h = pos / 6usize;
+            let pos_w = pos % 6usize;
             let col_slice = input_reshaped
                 .clone()
                 .slice([0..batch_size, 0..channels, 0..4usize, pos..pos + 1])
                 .reshape([batch_size, channels, 2usize, 2usize]);
             for bh in 0..2usize {
                 for bw in 0..2usize {
-                    let h_idx = pos_h * 2usize + bh * 1usize;
-                    let w_idx = pos_w * 2usize + bw * 1usize;
-                    if h_idx < 6usize && w_idx < 6usize {
-                        let h_out = h_idx;
-                        let w_out = w_idx;
+                    let h_idx = pos_h * 1usize + bh * 1usize;
+                    let w_idx = pos_w * 1usize + bw * 1usize;
+                    if h_idx >= 1usize && h_idx < 5usize + 1usize && w_idx >= 1usize
+                        && w_idx < 5usize + 1usize
+                    {
+                        let h_out = h_idx - 1usize;
+                        let w_out = w_idx - 1usize;
                         let val = col_slice
                             .clone()
                             .slice([0..batch_size, 0..channels, bh..bh + 1, bw..bw + 1]);

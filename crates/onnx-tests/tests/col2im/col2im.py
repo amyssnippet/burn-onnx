@@ -23,12 +23,6 @@ def build_model():
     # col_channels = C * prod(block_shape) = 1 * 1 * 5 = 5
     # Input shape: [1, 5, 5]
     input_tensor = onnx.helper.make_tensor_value_info("input", TensorProto.FLOAT, [1, 5, 5])
-    image_shape_tensor = onnx.helper.make_tensor_value_info(
-        "image_shape", TensorProto.INT64, [2]
-    )
-    block_shape_tensor = onnx.helper.make_tensor_value_info(
-        "block_shape", TensorProto.INT64, [2]
-    )
     output_tensor = onnx.helper.make_tensor_value_info(
         "output", TensorProto.FLOAT, [1, 1, 5, 5]
     )

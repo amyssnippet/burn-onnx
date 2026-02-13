@@ -70,7 +70,7 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
 
         let mut scatter_indices = vec![0i64; total_input_elements];
 
-        for i in 0..total_input_elements {
+        for (i, index) in scatter_indices.iter_mut().enumerate() {
             let block_idx = i / total_windows;
             let window_idx = i % total_windows;
 
@@ -101,7 +101,7 @@ impl NodeCodegen for onnx_ir::col2im::Col2ImNode {
                 stride_accumulator *= padded_dims[dim];
             }
 
-            scatter_indices[i] = flat_output_index as i64;
+            *index = flat_output_index as i64;
         }
 
         // Create constant tensor from logic

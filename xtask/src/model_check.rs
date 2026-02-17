@@ -5,7 +5,7 @@ use tracel_xtask::prelude::*;
 
 #[derive(clap::Args)]
 pub struct ModelCheckArgs {
-    /// Model to operate on (default: all models).
+    /// Model id to operate on, e.g. "qwen-2.5" (default: all non-blocked models).
     #[arg(long)]
     pub model: Option<String>,
 
@@ -38,74 +38,123 @@ pub enum ModelCheckSubCommand {
 }
 
 struct ModelInfo {
+    /// Unique identifier used by `--model <id>`.
+    id: &'static str,
+    /// Directory under crates/model-checks/.
     dir: &'static str,
     name: &'static str,
     /// Optional (env_var, default_value) for models with selectable variants.
     env: Option<(&'static str, &'static str)>,
-    /// Skipped in default "all" runs; still runnable with `--model <name>`.
+    /// Extra arguments passed to get_model.py during download.
+    download_args: &'static [&'static str],
+    /// Skipped in default "all" runs; still runnable with `--model <id>`.
     blocked: bool,
 }
 
 const MODELS: &[ModelInfo] = &[
     ModelInfo {
+        id: "silero-vad",
         dir: "silero-vad",
         name: "Silero VAD",
         env: None,
+        download_args: &[],
         blocked: false,
     },
     ModelInfo {
+        id: "all-minilm-l6-v2",
         dir: "all-minilm-l6-v2",
         name: "all-MiniLM-L6-v2",
         env: None,
+        download_args: &[],
         blocked: false,
     },
     ModelInfo {
+        id: "clip-vit-b-32-text",
         dir: "clip-vit-b-32-text",
         name: "CLIP ViT-B-32 text",
         env: None,
+        download_args: &[],
         blocked: false,
     },
     ModelInfo {
+        id: "clip-vit-b-32-vision",
         dir: "clip-vit-b-32-vision",
         name: "CLIP ViT-B-32 vision",
         env: None,
+        download_args: &[],
         blocked: false,
     },
     ModelInfo {
+        id: "modernbert-base",
         dir: "modernbert-base",
         name: "ModernBERT-base",
         env: None,
+        download_args: &[],
         blocked: false,
     },
     ModelInfo {
+        id: "rf-detr",
         dir: "rf-detr",
         name: "RF-DETR Small",
         env: None,
+        download_args: &[],
         blocked: false,
     },
     ModelInfo {
+        id: "depth-anything-v2",
         dir: "depth-anything-v2",
         name: "Depth-Anything-v2",
         env: None,
+        download_args: &[],
         blocked: false,
     },
     ModelInfo {
+        id: "albert",
         dir: "albert",
         name: "ALBERT",
         env: Some(("ALBERT_MODEL", "albert-base-v2")),
+        download_args: &[],
         blocked: false,
     },
     ModelInfo {
+        id: "yolo",
         dir: "yolo",
         name: "YOLO",
         env: Some(("YOLO_MODEL", "yolov8n")),
+        download_args: &[],
         blocked: false,
     },
     ModelInfo {
+        id: "mediapipe-face-detector",
         dir: "mediapipe-face-detector",
         name: "MediaPipe Face Detector",
         env: None,
+        download_args: &[],
         blocked: false,
+    },
+    ModelInfo {
+        id: "qwen-1.5",
+        dir: "qwen",
+        name: "Qwen1.5 0.5B",
+        env: Some(("QWEN_MODEL", "qwen1.5-0.5b")),
+        download_args: &["--model", "qwen1.5-0.5b"],
+        blocked: true,
+    },
+    ModelInfo {
+        id: "qwen-2.5",
+        dir: "qwen",
+        name: "Qwen2.5 0.5B",
+        env: Some(("QWEN_MODEL", "qwen2.5-0.5b")),
+        download_args: &["--model", "qwen2.5-0.5b"],
+        blocked: true,
+    },
+    ModelInfo {
+        id: "qwen-3",
+        dir: "qwen",
+        name: "Qwen3 0.6B",
+        env: Some(("QWEN_MODEL", "qwen3-0.6b")),
+        download_args: &["--model", "qwen3-0.6b"],
+        blocked: true,
     },
 ];
 
@@ -131,10 +180,12 @@ fn cargo_args<'a>(base: &'a str, features: &'a str, release: bool) -> Vec<&'a st
 
 fn download(model: &ModelInfo) -> anyhow::Result<()> {
     let dir = model_dir(model);
+    let mut args = vec!["run", "get_model.py"];
+    args.extend_from_slice(model.download_args);
     info!("Downloading {} artifacts...", model.name);
     run_process(
         "uv",
-        &["run", "get_model.py"],
+        &args,
         None,
         Some(&dir),
         &format!("Failed to download {} model", model.name),
@@ -196,9 +247,9 @@ pub fn handle_command(args: ModelCheckArgs) -> anyhow::Result<()> {
         Some(name) => {
             let m = MODELS
                 .iter()
-                .find(|m| m.dir == name.as_str())
+                .find(|m| m.id == name.as_str())
                 .ok_or_else(|| {
-                    let valid: Vec<&str> = MODELS.iter().map(|m| m.dir).collect();
+                    let valid: Vec<&str> = MODELS.iter().map(|m| m.id).collect();
                     anyhow::anyhow!(
                         "Unknown model '{}'. Valid models: {}",
                         name,

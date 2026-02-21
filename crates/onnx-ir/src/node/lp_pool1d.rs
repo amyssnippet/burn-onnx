@@ -121,6 +121,12 @@ impl NodeProcessor for LpPool1dProcessor {
                         )));
                     }
                     if dilations.iter().any(|&d| d != 1) {
+                        if opset < 11 {
+                            return Err(ProcessError::Custom(format!(
+                                "LpPool1d: dilations requires opset 11+, got opset {}",
+                                opset
+                            )));
+                        }
                         return Err(ProcessError::Custom(
                             "LpPool1d: dilations != 1 is not supported in burn-onnx yet"
                                 .to_string(),
@@ -328,5 +334,17 @@ mod tests {
         assert!(result.is_err());
         let err_msg = format!("{}", result.unwrap_err());
         assert!(err_msg.contains("dilations != 1 is not supported"));
+    }
+
+    #[test]
+    fn test_lppool1d_dilation_opset_validation() {
+        let mut node = create_test_node(vec![3], vec![1], vec![0, 0], Some(vec![2]), 0, None);
+        let processor = LpPool1dProcessor;
+        let prefs = OutputPreferences::new();
+
+        let result = processor.infer_types(&mut node, 10, &prefs);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("dilations requires opset 11+"));
     }
 }

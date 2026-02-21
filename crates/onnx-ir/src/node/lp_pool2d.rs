@@ -60,9 +60,38 @@ impl NodeProcessor for LpPool2dProcessor {
         opset: usize,
         _output_preferences: &OutputPreferences,
     ) -> Result<(), ProcessError> {
+        let mut has_kernel_shape = false;
+
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
-                "kernel_shape" | "strides" | "pads" => {}
+                "kernel_shape" => {
+                    has_kernel_shape = true;
+                    let kernel_shape = value.clone().into_i64s();
+                    if kernel_shape.len() != 2 {
+                        return Err(ProcessError::Custom(format!(
+                            "LpPool2d: kernel_shape must have length 2, got {:?}",
+                            kernel_shape
+                        )));
+                    }
+                }
+                "strides" => {
+                    let strides = value.clone().into_i64s();
+                    if strides.len() != 2 {
+                        return Err(ProcessError::Custom(format!(
+                            "LpPool2d: strides must have length 2, got {:?}",
+                            strides
+                        )));
+                    }
+                }
+                "pads" => {
+                    let pads = value.clone().into_i64s();
+                    if pads.len() != 4 {
+                        return Err(ProcessError::Custom(format!(
+                            "LpPool2d: pads must have length 4, got {:?}",
+                            pads
+                        )));
+                    }
+                }
                 "p" => {
                     let p = value.clone().into_i64();
                     if p <= 0 {
@@ -83,11 +112,17 @@ impl NodeProcessor for LpPool2dProcessor {
                 }
                 "dilations" => {
                     let dilations = value.clone().into_i64s();
-                    if dilations.iter().any(|&d| d != 1) && opset < 11 {
+                    if dilations.len() != 2 {
                         return Err(ProcessError::Custom(format!(
-                            "LpPool: dilations requires opset 11+, got opset {}",
-                            opset
+                            "LpPool2d: dilations must have length 2, got {:?}",
+                            dilations
                         )));
+                    }
+                    if dilations.iter().any(|&d| d != 1) {
+                        return Err(ProcessError::Custom(
+                            "LpPool2d: dilations != 1 is not supported in burn-onnx yet"
+                                .to_string(),
+                        ));
                     }
                 }
                 "auto_pad" => {
@@ -100,6 +135,12 @@ impl NodeProcessor for LpPool2dProcessor {
                     });
                 }
             }
+        }
+
+        if !has_kernel_shape {
+            return Err(ProcessError::Custom(
+                "LpPool2d: missing required attribute kernel_shape".to_string(),
+            ));
         }
 
         crate::processor::same_as_input(node);
@@ -127,6 +168,31 @@ impl NodeProcessor for LpPool2dProcessor {
                 "p" => p = value.clone().into_i64(),
                 _ => {}
             }
+        }
+
+        if kernel_shape.len() != 2 {
+            return Err(ProcessError::Custom(format!(
+                "LpPool2d: kernel_shape must have length 2, got {:?}",
+                kernel_shape
+            )));
+        }
+        if strides.len() != 2 {
+            return Err(ProcessError::Custom(format!(
+                "LpPool2d: strides must have length 2, got {:?}",
+                strides
+            )));
+        }
+        if pads.len() != 4 {
+            return Err(ProcessError::Custom(format!(
+                "LpPool2d: pads must have length 4, got {:?}",
+                pads
+            )));
+        }
+        if dilations.len() != 2 {
+            return Err(ProcessError::Custom(format!(
+                "LpPool2d: dilations must have length 2, got {:?}",
+                dilations
+            )));
         }
 
         let padding = padding_config_2d(&pads);
@@ -235,5 +301,39 @@ mod tests {
         assert!(result.is_err());
         let err_msg = format!("{}", result.unwrap_err());
         assert!(err_msg.contains("ceil_mode requires opset 18+"));
+    }
+
+    #[test]
+    fn test_lppool2d_missing_kernel_shape_validation() {
+        let mut node = TestNodeBuilder::new(NodeType::LpPool2d, "test_lppool2d_missing_kernel")
+            .input_tensor_f32("data", 4, None)
+            .output_tensor_f32("output", 4, None)
+            .build();
+        let processor = LpPool2dProcessor;
+        let prefs = OutputPreferences::new();
+
+        let result = processor.infer_types(&mut node, 16, &prefs);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("missing required attribute kernel_shape"));
+    }
+
+    #[test]
+    fn test_lppool2d_dilation_unsupported_validation() {
+        let mut node = create_test_node(
+            vec![2, 2],
+            vec![1, 1],
+            vec![0, 0, 0, 0],
+            Some(vec![2, 1]),
+            0,
+            None,
+        );
+        let processor = LpPool2dProcessor;
+        let prefs = OutputPreferences::new();
+
+        let result = processor.infer_types(&mut node, 16, &prefs);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("dilations != 1 is not supported"));
     }
 }

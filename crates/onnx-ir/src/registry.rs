@@ -423,6 +423,14 @@ impl ProcessorRegistry {
             NodeType::MatMulInteger,
             Box::new(crate::node::matmulinteger::MatMulIntegerProcessor),
         );
+        registry.register(
+            NodeType::DequantizeLinear,
+            Box::new(crate::node::dequantize_linear::DequantizeLinearProcessor),
+        );
+        registry.register(
+            NodeType::QuantizeLinear,
+            Box::new(crate::node::quantize_linear::QuantizeLinearProcessor),
+        );
 
         // Array operations
         registry.register(

@@ -202,6 +202,8 @@ impl_node_codegen_dispatch! {
     Gemm,
     Linear,
     MatMulInteger,
+    DequantizeLinear,
+    QuantizeLinear,
 
     // Constant ops
     Constant,

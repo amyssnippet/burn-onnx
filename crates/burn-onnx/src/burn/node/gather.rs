@@ -227,8 +227,10 @@ fn forward_tensor_gather(
                         })
                         .collect::<Vec<_>>();
                     quote! {
-                        #pre_convert
-                        let #output = #input.slice(s![#(#slice_args),*]);
+                        let #output = {
+                            #pre_convert
+                            #input.slice(s![#(#slice_args),*])
+                        };
                     }
                 }
                 _ => panic!(
@@ -598,8 +600,10 @@ mod tests {
             values: Tensor<B, 1>,
             position: Tensor<B, 1, Int>,
         ) -> Tensor<B, 1> {
-            let __scalar_idx = position.into_scalar().elem::<i64>();
-            let result = values.slice(s![__scalar_idx]);
+            let result = {
+                let __scalar_idx = position.into_scalar().elem::<i64>();
+                values.slice(s![__scalar_idx])
+            };
             result
         }
         ");

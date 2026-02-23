@@ -111,6 +111,22 @@ mod tests {
     }
 
     #[test]
+    fn test_lp_pool1d_forward_with_clone() {
+        let node = create_lp_pool1d_node("pool1", 3);
+        let code = codegen_forward_with_clone(&node);
+        assert_snapshot!(code, @r"
+        pub fn forward(&self, input: Tensor<B, 3>) -> Tensor<B, 3> {
+            let output = self
+                .pool1
+                .forward(input.clone().abs().powf_scalar(3f32))
+                .mul_scalar(3f32)
+                .powf_scalar(0.33333334f32);
+            output
+        }
+        ");
+    }
+
+    #[test]
     fn test_lp_pool1d_field_init() {
         let node = create_lp_pool1d_node("pool1", 3);
         let code = codegen_field_init(&node);

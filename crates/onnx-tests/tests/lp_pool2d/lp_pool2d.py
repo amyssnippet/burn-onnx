@@ -24,6 +24,7 @@ def create_model() -> onnx.ModelProto:
         kernel_shape=[2, 3],
         strides=[1, 2],
         pads=[0, 1, 1, 0],
+        p=3,
     )
 
     graph = helper.make_graph(

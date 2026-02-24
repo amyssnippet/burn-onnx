@@ -10,6 +10,8 @@ pub struct ModelCheckArgs {
     pub model: Option<String>,
 
     /// Cargo features to pass (default: ndarray).
+    ///
+    /// Note: GPU backends (`wgpu`/`metal`) require `fusion` to be included.
     #[arg(long, default_value = "ndarray")]
     pub features: String,
 
@@ -254,9 +256,22 @@ fn run_one(
     }
 }
 
+fn normalize_features(features: &str) -> String {
+    let has_wgpu = features.split(',').any(|f| f.trim() == "wgpu");
+    let has_metal = features.split(',').any(|f| f.trim() == "metal");
+    let has_fusion = features.split(',').any(|f| f.trim() == "fusion");
+
+    if (has_wgpu || has_metal) && !has_fusion {
+        format!("{features},fusion")
+    } else {
+        features.to_string()
+    }
+}
+
 pub fn handle_command(args: ModelCheckArgs) -> anyhow::Result<()> {
     let subcmd = args.command.unwrap_or(ModelCheckSubCommand::All);
     let release = !args.debug;
+    let normalized_features = normalize_features(&args.features);
 
     let models: Vec<&ModelInfo> = match &args.model {
         Some(name) => {
@@ -279,7 +294,7 @@ pub fn handle_command(args: ModelCheckArgs) -> anyhow::Result<()> {
     let mut failed: Vec<&str> = Vec::new();
 
     for model in &models {
-        if let Err(e) = run_one(model, &subcmd, &args.features, release) {
+        if let Err(e) = run_one(model, &subcmd, &normalized_features, release) {
             error!("\x1B[31;1m{} failed: {}\x1B[0m", model.name, e);
             if args.fail_fast {
                 return Err(e);

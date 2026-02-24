@@ -44,13 +44,13 @@ def create_model() -> onnx.ModelProto:
 def main() -> None:
     model = create_model()
     onnx.save(model, "dequantize_linear_axis.onnx")
+    print("Saved dequantize_linear_axis.onnx")
 
     x = np.array([[2, 4, 6], [1, 3, 5]], dtype=np.int32)
     x_scale = np.array([0.5, 2.0], dtype=np.float32)
     ref = ReferenceEvaluator(model)
     (y,) = ref.run(None, {"x": x, "x_scale": x_scale})
 
-    print("Saved dequantize_linear_axis.onnx")
     print("Input:", x)
     print("Output:", y)
 

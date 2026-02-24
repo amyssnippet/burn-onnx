@@ -51,12 +51,18 @@ impl NodeProcessor for QuantizeLinearProcessor {
             )));
         }
 
-        if let Some(block_size) = config.block_size
-            && block_size > 0
-        {
-            return Err(ProcessError::Custom(format!(
-                "QuantizeLinear: blocked quantization (block_size={block_size}) is not supported yet"
-            )));
+        if let Some(block_size) = config.block_size {
+            if block_size < 0 {
+                return Err(ProcessError::Custom(format!(
+                    "QuantizeLinear: invalid block_size={block_size}; per ONNX spec block_size must be 0 or a positive multiple of 2"
+                )));
+            }
+
+            if block_size > 0 {
+                return Err(ProcessError::Custom(format!(
+                    "QuantizeLinear: blocked quantization (block_size={block_size}) is not supported yet"
+                )));
+            }
         }
 
         if !node.inputs[0].ty.is_on_device() {
@@ -82,9 +88,9 @@ impl NodeProcessor for QuantizeLinearProcessor {
         }
 
         let scale_dtype = node.inputs[1].ty.elem_type();
-        if !(scale_dtype.is_float() || scale_dtype == DType::I32) {
+        if !matches!(scale_dtype, DType::F32 | DType::F16 | DType::BF16) {
             return Err(ProcessError::TypeMismatch {
-                expected: "float or int32 tensor for y_scale".to_string(),
+                expected: "float, float16 or bfloat16 tensor for y_scale".to_string(),
                 actual: format!("{:?}", scale_dtype),
             });
         }
@@ -95,8 +101,8 @@ impl NodeProcessor for QuantizeLinearProcessor {
                 && zero != dtype
             {
                 return Err(ProcessError::TypeMismatch {
-                    expected: format!("y_zero_point dtype {:?}", dtype),
-                    actual: format!("{:?}", zero),
+                    expected: format!("output dtype {:?}", dtype),
+                    actual: format!("y_zero_point dtype {:?}", zero),
                 });
             }
             dtype
@@ -141,10 +147,26 @@ impl NodeProcessor for QuantizeLinearProcessor {
         for (key, value) in node.attrs.iter() {
             match key.as_str() {
                 "axis" => {
-                    config.axis = Some(value.clone().into_i64());
+                    config.axis = Some(match value {
+                        AttributeValue::Int64(v) => *v,
+                        _ => {
+                            return Err(ProcessError::InvalidAttribute {
+                                name: "axis".to_string(),
+                                reason: "must be Int64".to_string(),
+                            });
+                        }
+                    });
                 }
                 "block_size" => {
-                    config.block_size = Some(value.clone().into_i64());
+                    config.block_size = Some(match value {
+                        AttributeValue::Int64(v) => *v,
+                        _ => {
+                            return Err(ProcessError::InvalidAttribute {
+                                name: "block_size".to_string(),
+                                reason: "must be Int64".to_string(),
+                            });
+                        }
+                    });
                 }
                 "output_dtype" => {
                     let dtype = match value {
@@ -179,7 +201,15 @@ impl NodeProcessor for QuantizeLinearProcessor {
                     config.precision = Some(dtype);
                 }
                 "saturate" => {
-                    config.saturate = Some(value.clone().into_i64());
+                    config.saturate = Some(match value {
+                        AttributeValue::Int64(v) => *v,
+                        _ => {
+                            return Err(ProcessError::InvalidAttribute {
+                                name: "saturate".to_string(),
+                                reason: "must be Int64".to_string(),
+                            });
+                        }
+                    });
                 }
                 _ => {}
             }

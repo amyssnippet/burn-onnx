@@ -33,6 +33,14 @@ pub(crate) fn align_rhs_for_lhs_rank(
 
     if rhs_rank == 1 && lhs_rank > 1 {
         let axis = axis.unwrap_or(1);
+        let min_axis = -(lhs_rank as i64);
+        let max_axis = lhs_rank as i64 - 1;
+        if axis < min_axis || axis > max_axis {
+            panic!(
+                "align_rhs_for_lhs_rank: axis {} out of bounds for lhs_rank {}; expected in [{}, {}]",
+                axis, lhs_rank, min_axis, max_axis
+            );
+        }
         let axis_norm = if axis < 0 {
             (lhs_rank as i64 + axis) as usize
         } else {

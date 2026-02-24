@@ -210,7 +210,7 @@ impl NodeProcessor for LpPool1dProcessor {
             stride[0] as usize,
             padding,
             dilations[0] as usize,
-            ceil_mode == 1,
+            ceil_mode != 0,
             auto_pad,
             p,
         );

@@ -816,6 +816,9 @@ cargo xtask model-check --model silero-vad build
 # Select backend
 cargo xtask model-check --features tch
 
+# GPU backends require fusion
+cargo xtask model-check --features wgpu,fusion
+
 # Debug build
 cargo xtask model-check --model silero-vad --debug
 

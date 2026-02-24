@@ -48,6 +48,9 @@ impl NodeCodegen for onnx_ir::lp_pool2d::LpPool2dNode {
         let output = arg_to_ident(self.outputs.first().unwrap());
         let field = Ident::new(&self.name, Span::call_site());
 
+        if self.config.p <= 0 {
+            panic!("lp_pool2d: p must be non-zero, got {}", self.config.p);
+        }
         let p = self.config.p as f32;
         let p_inv = 1.0f32 / p;
         let kernel_size = (self.config.kernel_size[0] * self.config.kernel_size[1]) as f32;

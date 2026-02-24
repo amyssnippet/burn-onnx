@@ -46,12 +46,12 @@ def create_model() -> onnx.ModelProto:
 def main() -> None:
     model = create_model()
     onnx.save(model, "lp_pool1d.onnx")
+    print("Saved lp_pool1d.onnx")
 
     x = np.array([[[-1.0, 2.0, -3.0, 4.0, -5.0]]], dtype=np.float32)
     ref = ReferenceEvaluator(model)
     (y,) = ref.run(None, {"input": x})
 
-    print("Saved lp_pool1d.onnx")
     print("Input:", x)
     print("Output:", y)
 

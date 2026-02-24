@@ -45,6 +45,7 @@ def create_model() -> onnx.ModelProto:
 def main() -> None:
     model = create_model()
     onnx.save(model, "quantize_linear_axis.onnx")
+    print("Saved quantize_linear_axis.onnx")
 
     x = np.array([[-1.0, 0.0, 1.0], [2.0, 4.0, 6.0]], dtype=np.float32)
     y_scale = np.array([0.5, 2.0], dtype=np.float32)
@@ -52,7 +53,6 @@ def main() -> None:
     ref = ReferenceEvaluator(model)
     (y,) = ref.run(None, {"x": x, "y_scale": y_scale, "y_zero": y_zero})
 
-    print("Saved quantize_linear_axis.onnx")
     print("Input:", x)
     print("Output:", y)
 

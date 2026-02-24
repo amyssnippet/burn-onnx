@@ -201,13 +201,33 @@ impl NodeProcessor for LpPool2dProcessor {
             )));
         }
 
+        let to_positive_usize = |name: &str, value: i64| -> Result<usize, ProcessError> {
+            if value <= 0 {
+                return Err(ProcessError::Custom(format!(
+                    "LpPool2d: {name} values must be > 0, got {value}"
+                )));
+            }
+            usize::try_from(value).map_err(|_| {
+                ProcessError::Custom(format!(
+                    "LpPool2d: {name} value {value} is out of range for usize"
+                ))
+            })
+        };
+
+        let kernel_h = to_positive_usize("kernel_shape", kernel_shape[0])?;
+        let kernel_w = to_positive_usize("kernel_shape", kernel_shape[1])?;
+        let stride_h = to_positive_usize("strides", strides[0])?;
+        let stride_w = to_positive_usize("strides", strides[1])?;
+        let dilation_h = to_positive_usize("dilations", dilations[0])?;
+        let dilation_w = to_positive_usize("dilations", dilations[1])?;
+
         let padding = padding_config_2d(&pads);
 
         let config = LpPool2dConfig::new(
-            [kernel_shape[0] as usize, kernel_shape[1] as usize],
-            [strides[0] as usize, strides[1] as usize],
+            [kernel_h, kernel_w],
+            [stride_h, stride_w],
             padding,
-            [dilations[0] as usize, dilations[1] as usize],
+            [dilation_h, dilation_w],
             ceil_mode == 1,
             auto_pad,
             p,

@@ -10,6 +10,13 @@ impl NodeCodegen for onnx_ir::lp_pool1d::LpPool1dNode {
     }
 
     fn field(&self) -> Option<Field> {
+        if self.config.dilation != 1 {
+            panic!(
+                "lp_pool1d: dilation {} is not supported by AvgPool1dConfig",
+                self.config.dilation
+            );
+        }
+
         let name = Ident::new(&self.name, Span::call_site());
         let kernel_size = self.config.kernel_size.to_tokens();
         let strides = self.config.stride.to_tokens();
@@ -48,6 +55,7 @@ impl NodeCodegen for onnx_ir::lp_pool1d::LpPool1dNode {
         let output = arg_to_ident(self.outputs.first().unwrap());
         let field = Ident::new(&self.name, Span::call_site());
 
+        assert!(self.config.p > 0, "LP pool p must be > 0");
         let p = self.config.p as f32;
         let p_inv = 1.0f32 / p;
         let kernel_size = self.config.kernel_size as f32;

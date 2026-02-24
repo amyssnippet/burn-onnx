@@ -63,10 +63,10 @@ cargo run
 cargo run --features tch --no-default-features
 
 # WGPU backend (GPU via WebGPU)
-cargo run --features wgpu --no-default-features
+cargo run --features wgpu,fusion --no-default-features
 
 # Metal backend (Apple Silicon GPU)
-cargo run --features metal --no-default-features
+cargo run --features metal,fusion --no-default-features
 ```
 
 ## Test Output Example

@@ -43,9 +43,9 @@ impl NodeProcessor for DequantizeLinearProcessor {
     ) -> Result<(), ProcessError> {
         let config = self.extract_config(node, opset)?;
 
-        if config.output_dtype.is_some() && opset < 24 {
+        if config.output_dtype.is_some() && opset < 21 {
             return Err(ProcessError::Custom(format!(
-                "DequantizeLinear: output_dtype requires opset 24+, got {opset}"
+                "DequantizeLinear: output_dtype requires opset 21+, got {opset}"
             )));
         }
 

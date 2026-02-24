@@ -52,13 +52,22 @@ fn ensure_cargo_bin_on_path() {
 
     paths.insert(0, cargo_bin.clone());
 
-    if let Ok(new_path) = env::join_paths(paths) {
-        // SAFETY: This function runs at the start of `main` before any threads are
-        // spawned, so no concurrent reads/writes of process environment can occur.
-        unsafe {
-            env::set_var("PATH", new_path);
+    match env::join_paths(paths) {
+        Ok(new_path) => {
+            // SAFETY: This function runs at the start of `main` before any threads are
+            // spawned, so no concurrent reads/writes of process environment can occur.
+            unsafe {
+                env::set_var("PATH", new_path);
+            }
+            info!("Added '{}' to PATH for this xtask run", cargo_bin.display());
         }
-        info!("Added '{}' to PATH for this xtask run", cargo_bin.display());
+        Err(err) => {
+            warn!(
+                "Failed to add '{}' to PATH for this xtask run: {}",
+                cargo_bin.display(),
+                err
+            );
+        }
     }
 }
 

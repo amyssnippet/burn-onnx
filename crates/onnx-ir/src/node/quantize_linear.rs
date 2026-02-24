@@ -54,7 +54,7 @@ impl NodeProcessor for QuantizeLinearProcessor {
         if let Some(block_size) = config.block_size {
             if block_size < 0 {
                 return Err(ProcessError::Custom(format!(
-                    "QuantizeLinear: invalid block_size={block_size}; per ONNX spec block_size must be 0 or a positive multiple of 2"
+                    "QuantizeLinear: invalid block_size={block_size}; per ONNX spec block_size must be 0 or a positive integer"
                 )));
             }
 

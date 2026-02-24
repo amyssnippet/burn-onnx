@@ -116,7 +116,9 @@ fn main() {
             .reshape([1, reference.chunk_size]);
         let state = Tensor::<MyBackend, 3>::zeros([2, 1, 128], &device);
         let start = Instant::now();
-        let _ = model.forward(input, reference.sample_rate, state);
+        let (warmup_output, warmup_state) = model.forward(input, reference.sample_rate, state);
+        let _: f32 = warmup_output.into_scalar();
+        let _: f32 = warmup_state.max().into_scalar();
         println!("  Warmup completed in {:.2?}\n", start.elapsed());
     }
 

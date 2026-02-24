@@ -228,7 +228,7 @@ impl NodeProcessor for LpPool2dProcessor {
             [stride_h, stride_w],
             padding,
             [dilation_h, dilation_w],
-            ceil_mode == 1,
+            ceil_mode != 0,
             auto_pad,
             p,
         );

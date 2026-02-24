@@ -1,4 +1,4 @@
-use super::prelude::*;
+use super::{broadcast_helpers::align_binary_operands_for_broadcast, prelude::*};
 
 impl NodeCodegen for onnx_ir::node::arithmetic::DivNode {
     fn inputs(&self) -> &[Argument] {
@@ -22,18 +22,13 @@ impl NodeCodegen for onnx_ir::node::arithmetic::DivNode {
             (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
                 let lhs_rank = lhs_ty.rank();
                 let rhs_rank = rhs_ty.rank();
-
-                if lhs_rank == rhs_rank {
-                    quote! { #lhs.div(#rhs) }
-                } else if lhs_rank > rhs_rank {
-                    let num_dims = lhs_rank - rhs_rank;
-                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
-                    quote! { #lhs.div(#rhs.unsqueeze_dims(&[#(#dims),*])) }
-                } else {
-                    let num_dims = rhs_rank - lhs_rank;
-                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
-                    quote! { #lhs.unsqueeze_dims(&[#(#dims),*]).div(#rhs) }
-                }
+                let (lhs_expr, rhs_expr) = align_binary_operands_for_broadcast(
+                    quote! { #lhs },
+                    lhs_rank,
+                    quote! { #rhs },
+                    rhs_rank,
+                );
+                quote! { #lhs_expr.div(#rhs_expr) }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {
                 quote! { #lhs.div_scalar(#rhs) }

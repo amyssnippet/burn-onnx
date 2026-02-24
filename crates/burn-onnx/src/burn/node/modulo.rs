@@ -1,4 +1,4 @@
-use super::prelude::*;
+use super::{broadcast_helpers::align_binary_operands_for_broadcast, prelude::*};
 
 impl NodeCodegen for onnx_ir::modulo::ModNode {
     fn inputs(&self) -> &[Argument] {
@@ -23,51 +23,20 @@ impl NodeCodegen for onnx_ir::modulo::ModNode {
 
                 let lhs_rank = lhs_ty.rank();
                 let rhs_rank = rhs_ty.rank();
-
-                // Handle broadcasting if ranks differ
-                if lhs_rank != rhs_rank {
-                    let (smaller_tensor, larger_tensor, smaller_rank, larger_rank) =
-                        if lhs_rank < rhs_rank {
-                            (&lhs, &rhs, lhs_rank, rhs_rank)
-                        } else {
-                            (&rhs, &lhs, rhs_rank, lhs_rank)
-                        };
-
-                    // Calculate dimensions to unsqueeze
-                    let rank_diff = larger_rank - smaller_rank;
-                    let unsqueeze_dims = (0..rank_diff)
-                        .map(|i| {
-                            let i = i as isize;
-                            quote! { #i }
-                        })
-                        .collect::<Vec<_>>();
-
-                    let mod_op = if self.config.fmod {
-                        quote! { fmod }
-                    } else {
-                        quote! { remainder }
-                    };
-
-                    if lhs_rank < rhs_rank {
-                        quote! {
-                            let #output = #smaller_tensor
-                                .unsqueeze_dims(&[#(#unsqueeze_dims),*])
-                                .#mod_op(#larger_tensor);
-                        }
-                    } else {
-                        quote! {
-                            let #output = #larger_tensor.#mod_op(#smaller_tensor.unsqueeze_dims(&[#(#unsqueeze_dims),*]));
-                        }
-                    }
+                let mod_op = if self.config.fmod {
+                    quote! { fmod }
                 } else {
-                    let mod_op = if self.config.fmod {
-                        quote! { fmod }
-                    } else {
-                        quote! { remainder }
-                    };
-                    quote! {
-                        let #output = #lhs.#mod_op(#rhs);
-                    }
+                    quote! { remainder }
+                };
+                let (lhs_expr, rhs_expr) = align_binary_operands_for_broadcast(
+                    quote! { #lhs },
+                    lhs_rank,
+                    quote! { #rhs },
+                    rhs_rank,
+                );
+
+                quote! {
+                    let #output = #lhs_expr.#mod_op(#rhs_expr);
                 }
             }
             (lhs_ty, ArgType::ScalarNative(_)) if lhs_ty.is_on_device() => {

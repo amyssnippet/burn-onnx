@@ -1,4 +1,4 @@
-use super::prelude::*;
+use super::{broadcast_helpers::align_binary_operands_for_broadcast, prelude::*};
 
 impl NodeCodegen for onnx_ir::node::max::MaxNode {
     fn inputs(&self) -> &[Argument] {
@@ -21,18 +21,13 @@ impl NodeCodegen for onnx_ir::node::max::MaxNode {
             (lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
                 let lhs_rank = lhs_ty.rank();
                 let rhs_rank = rhs_ty.rank();
-
-                if lhs_rank == rhs_rank {
-                    quote! { #lhs.max_pair(#rhs) }
-                } else if lhs_rank > rhs_rank {
-                    let num_dims = lhs_rank - rhs_rank;
-                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
-                    quote! { #lhs.max_pair(#rhs.unsqueeze_dims(&[#(#dims),*])) }
-                } else {
-                    let num_dims = rhs_rank - lhs_rank;
-                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
-                    quote! { #lhs.unsqueeze_dims(&[#(#dims),*]).max_pair(#rhs) }
-                }
+                let (lhs_expr, rhs_expr) = align_binary_operands_for_broadcast(
+                    quote! { #lhs },
+                    lhs_rank,
+                    quote! { #rhs },
+                    rhs_rank,
+                );
+                quote! { #lhs_expr.max_pair(#rhs_expr) }
             }
             _ => panic!("max: unsupported input types"),
         };

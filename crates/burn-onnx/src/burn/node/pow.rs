@@ -1,4 +1,4 @@
-use super::prelude::*;
+use super::{broadcast_helpers::align_binary_operands_for_broadcast, prelude::*};
 
 /// Type of power operation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,34 +51,26 @@ impl NodeCodegen for onnx_ir::pow::PowNode {
             (PowerType::Int, lhs_ty, rhs_ty) if lhs_ty.is_on_device() && rhs_ty.is_on_device() => {
                 let lhs_rank = lhs_ty.rank();
                 let rhs_rank = rhs_ty.rank();
-                if lhs_rank == rhs_rank {
-                    quote! { #lhs.powi(#rhs) }
-                } else if lhs_rank > rhs_rank {
-                    let num_dims = lhs_rank - rhs_rank;
-                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
-                    quote! { #lhs.powi(#rhs.unsqueeze_dims(&[#(#dims),*])) }
-                } else {
-                    let num_dims = rhs_rank - lhs_rank;
-                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
-                    quote! { #lhs.unsqueeze_dims(&[#(#dims),*]).powi(#rhs) }
-                }
+                let (lhs_expr, rhs_expr) = align_binary_operands_for_broadcast(
+                    quote! { #lhs },
+                    lhs_rank,
+                    quote! { #rhs },
+                    rhs_rank,
+                );
+                quote! { #lhs_expr.powi(#rhs_expr) }
             }
             (PowerType::Float, lhs_ty, rhs_ty)
                 if lhs_ty.is_on_device() && rhs_ty.is_on_device() =>
             {
                 let lhs_rank = lhs_ty.rank();
                 let rhs_rank = rhs_ty.rank();
-                if lhs_rank == rhs_rank {
-                    quote! { #lhs.powf(#rhs) }
-                } else if lhs_rank > rhs_rank {
-                    let num_dims = lhs_rank - rhs_rank;
-                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
-                    quote! { #lhs.powf(#rhs.unsqueeze_dims(&[#(#dims),*])) }
-                } else {
-                    let num_dims = rhs_rank - lhs_rank;
-                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
-                    quote! { #lhs.unsqueeze_dims(&[#(#dims),*]).powf(#rhs) }
-                }
+                let (lhs_expr, rhs_expr) = align_binary_operands_for_broadcast(
+                    quote! { #lhs },
+                    lhs_rank,
+                    quote! { #rhs },
+                    rhs_rank,
+                );
+                quote! { #lhs_expr.powf(#rhs_expr) }
             }
             // ScalarNative + ScalarNative (native Rust pow)
             (PowerType::Float, ArgType::ScalarNative(_), ArgType::ScalarNative(_)) => {

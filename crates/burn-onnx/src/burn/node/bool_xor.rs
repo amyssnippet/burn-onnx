@@ -1,4 +1,4 @@
-use super::prelude::*;
+use super::{broadcast_helpers::align_binary_operands_for_broadcast, prelude::*};
 
 impl NodeCodegen for onnx_ir::node::xor::XorNode {
     fn inputs(&self) -> &[Argument] {
@@ -24,17 +24,13 @@ impl NodeCodegen for onnx_ir::node::xor::XorNode {
                 let rhs_rank = rhs_ty.rank();
 
                 // XOR is implemented as not_equal for boolean tensors
-                if lhs_rank == rhs_rank {
-                    quote! { #lhs_value.not_equal(#rhs_value) }
-                } else if lhs_rank > rhs_rank {
-                    let num_dims = lhs_rank - rhs_rank;
-                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
-                    quote! { #lhs_value.not_equal(#rhs_value.unsqueeze_dims(&[#(#dims),*])) }
-                } else {
-                    let num_dims = rhs_rank - lhs_rank;
-                    let dims: Vec<isize> = (0..num_dims).map(|i| i as isize).collect();
-                    quote! { #lhs_value.unsqueeze_dims(&[#(#dims),*]).not_equal(#rhs_value) }
-                }
+                let (lhs_expr, rhs_expr) = align_binary_operands_for_broadcast(
+                    quote! { #lhs_value },
+                    lhs_rank,
+                    quote! { #rhs_value },
+                    rhs_rank,
+                );
+                quote! { #lhs_expr.not_equal(#rhs_expr) }
             }
             (ArgType::ScalarNative(_), rhs_ty) if rhs_ty.is_on_device() => quote! {
                 if #lhs_value { #rhs_value.bool_not() } else { #rhs_value }

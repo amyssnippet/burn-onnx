@@ -238,6 +238,12 @@ impl NodeProcessor for LpPool1dProcessor {
                 dilations
             )));
         }
+        if p <= 0 {
+            return Err(ProcessError::Custom(format!(
+                "LpPool1d: p must be > 0, got {}",
+                p
+            )));
+        }
 
         let padding = padding_config_1d(&pads);
 
@@ -394,6 +400,18 @@ mod tests {
             .infer_types(&mut dilation_zero, 16, &prefs)
             .expect_err("Expected non-positive dilation to fail");
         assert!(format!("{}", err).contains("dilations values must be > 0"));
+
+        let mut p_zero = create_test_node(vec![3], vec![1], vec![0, 0], None, 0, Some(0));
+        let err = processor
+            .infer_types(&mut p_zero, 16, &prefs)
+            .expect_err("Expected non-positive p to fail");
+        assert!(format!("{}", err).contains("p must be > 0"));
+
+        let p_zero_config = create_test_node(vec![3], vec![1], vec![0, 0], None, 0, Some(0));
+        let err = processor
+            .extract_config(&p_zero_config, 16)
+            .expect_err("Expected non-positive p to fail in extract_config");
+        assert!(format!("{}", err).contains("p must be > 0"));
     }
 
     #[test]

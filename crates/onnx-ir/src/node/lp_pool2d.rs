@@ -73,12 +73,24 @@ impl NodeProcessor for LpPool2dProcessor {
                             kernel_shape
                         )));
                     }
+                    if kernel_shape[0] <= 0 || kernel_shape[1] <= 0 {
+                        return Err(ProcessError::Custom(format!(
+                            "LpPool2d: kernel_shape values must be > 0, got {:?}",
+                            kernel_shape
+                        )));
+                    }
                 }
                 "strides" => {
                     let strides = value.clone().into_i64s();
                     if strides.len() != 2 {
                         return Err(ProcessError::Custom(format!(
                             "LpPool2d: strides must have length 2, got {:?}",
+                            strides
+                        )));
+                    }
+                    if strides[0] <= 0 || strides[1] <= 0 {
+                        return Err(ProcessError::Custom(format!(
+                            "LpPool2d: strides values must be > 0, got {:?}",
                             strides
                         )));
                     }
@@ -115,6 +127,12 @@ impl NodeProcessor for LpPool2dProcessor {
                     if dilations.len() != 2 {
                         return Err(ProcessError::Custom(format!(
                             "LpPool2d: dilations must have length 2, got {:?}",
+                            dilations
+                        )));
+                    }
+                    if dilations[0] <= 0 || dilations[1] <= 0 {
+                        return Err(ProcessError::Custom(format!(
+                            "LpPool2d: dilations values must be > 0, got {:?}",
                             dilations
                         )));
                     }
@@ -198,6 +216,30 @@ impl NodeProcessor for LpPool2dProcessor {
             return Err(ProcessError::Custom(format!(
                 "LpPool2d: dilations must have length 2, got {:?}",
                 dilations
+            )));
+        }
+        if kernel_shape[0] <= 0 || kernel_shape[1] <= 0 {
+            return Err(ProcessError::Custom(format!(
+                "LpPool2d: kernel_shape values must be > 0, got {:?}",
+                kernel_shape
+            )));
+        }
+        if strides[0] <= 0 || strides[1] <= 0 {
+            return Err(ProcessError::Custom(format!(
+                "LpPool2d: strides values must be > 0, got {:?}",
+                strides
+            )));
+        }
+        if dilations[0] <= 0 || dilations[1] <= 0 {
+            return Err(ProcessError::Custom(format!(
+                "LpPool2d: dilations values must be > 0, got {:?}",
+                dilations
+            )));
+        }
+        if p <= 0 {
+            return Err(ProcessError::Custom(format!(
+                "LpPool: p must be > 0, got {}",
+                p
             )));
         }
 

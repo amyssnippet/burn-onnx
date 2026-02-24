@@ -49,6 +49,14 @@ impl NodeProcessor for DequantizeLinearProcessor {
             )));
         }
 
+        if let Some(block_size) = config.block_size
+            && block_size > 0
+        {
+            return Err(ProcessError::Custom(format!(
+                "DequantizeLinear: blocked quantization (block_size={block_size}) is not supported yet"
+            )));
+        }
+
         if !node.inputs[0].ty.is_on_device() {
             return Err(ProcessError::TypeMismatch {
                 expected: "on-device tensor for x".to_string(),
@@ -239,5 +247,25 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(err, ProcessError::TypeMismatch { .. }));
+    }
+
+    #[test]
+    fn test_dequantize_linear_rejects_blocked_quantization() {
+        let mut node = TestNodeBuilder::new(NodeType::DequantizeLinear, "dq")
+            .input_tensor_i32("x", 2, None)
+            .input_tensor_f32("x_scale", 0, None)
+            .output_tensor_f32("y", 2, None)
+            .attr_int("block_size", 4)
+            .build();
+
+        node.inputs[0].ty = ArgType::Tensor(TensorType::new(DType::U8, 2, None));
+
+        let processor = DequantizeLinearProcessor;
+        let err = processor
+            .infer_types(&mut node, 21, &OutputPreferences::new())
+            .unwrap_err();
+
+        let err_msg = format!("{}", err);
+        assert!(err_msg.contains("blocked quantization"));
     }
 }

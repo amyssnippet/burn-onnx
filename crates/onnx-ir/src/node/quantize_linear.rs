@@ -51,6 +51,14 @@ impl NodeProcessor for QuantizeLinearProcessor {
             )));
         }
 
+        if let Some(block_size) = config.block_size
+            && block_size > 0
+        {
+            return Err(ProcessError::Custom(format!(
+                "QuantizeLinear: blocked quantization (block_size={block_size}) is not supported yet"
+            )));
+        }
+
         if !node.inputs[0].ty.is_on_device() {
             return Err(ProcessError::TypeMismatch {
                 expected: "on-device tensor for x".to_string(),
@@ -255,5 +263,23 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(err, ProcessError::TypeMismatch { .. }));
+    }
+
+    #[test]
+    fn test_quantize_linear_rejects_blocked_quantization() {
+        let mut node = TestNodeBuilder::new(NodeType::QuantizeLinear, "q")
+            .input_tensor_f32("x", 2, None)
+            .input_tensor_f32("y_scale", 0, None)
+            .output_tensor_f32("y", 2, None)
+            .attr_int("block_size", 8)
+            .build();
+
+        let processor = QuantizeLinearProcessor;
+        let err = processor
+            .infer_types(&mut node, 21, &OutputPreferences::new())
+            .unwrap_err();
+
+        let err_msg = format!("{}", err);
+        assert!(err_msg.contains("blocked quantization"));
     }
 }

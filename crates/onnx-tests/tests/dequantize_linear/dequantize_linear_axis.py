@@ -14,19 +14,20 @@ from onnx.reference import ReferenceEvaluator
 
 
 def create_model() -> onnx.ModelProto:
-    x = helper.make_tensor_value_info("x", TensorProto.INT32, [1, 4])
-    x_scale = helper.make_tensor_value_info("x_scale", TensorProto.FLOAT, [1])
-    y = helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 4])
+    x = helper.make_tensor_value_info("x", TensorProto.INT32, [2, 3])
+    x_scale = helper.make_tensor_value_info("x_scale", TensorProto.FLOAT, [2])
+    y = helper.make_tensor_value_info("y", TensorProto.FLOAT, [2, 3])
 
     dq = helper.make_node(
         "DequantizeLinear",
         inputs=["x", "x_scale"],
         outputs=["y"],
+        axis=0,
     )
 
     graph = helper.make_graph(
         [dq],
-        "dequantize_linear_graph",
+        "dequantize_linear_axis_graph",
         [x, x_scale],
         [y],
     )
@@ -42,14 +43,14 @@ def create_model() -> onnx.ModelProto:
 
 def main() -> None:
     model = create_model()
-    onnx.save(model, "dequantize_linear.onnx")
+    onnx.save(model, "dequantize_linear_axis.onnx")
 
-    x = np.array([[2, 4, 6, 10]], dtype=np.int32)
-    x_scale = np.array([0.5], dtype=np.float32)
+    x = np.array([[2, 4, 6], [1, 3, 5]], dtype=np.int32)
+    x_scale = np.array([0.5, 2.0], dtype=np.float32)
     ref = ReferenceEvaluator(model)
     (y,) = ref.run(None, {"x": x, "x_scale": x_scale})
 
-    print("Saved dequantize_linear.onnx")
+    print("Saved dequantize_linear_axis.onnx")
     print("Input:", x)
     print("Output:", y)
 

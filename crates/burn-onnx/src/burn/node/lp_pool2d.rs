@@ -49,7 +49,7 @@ impl NodeCodegen for onnx_ir::lp_pool2d::LpPool2dNode {
         let field = Ident::new(&self.name, Span::call_site());
 
         if self.config.p <= 0 {
-            panic!("lp_pool2d: p must be non-zero, got {}", self.config.p);
+            panic!("lp_pool2d: p must be > 0, got {}", self.config.p);
         }
         let p = self.config.p as f32;
         let p_inv = 1.0f32 / p;

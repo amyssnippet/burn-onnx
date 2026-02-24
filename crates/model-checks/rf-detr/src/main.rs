@@ -124,7 +124,7 @@ fn main() {
     let start = Instant::now();
     let warmup_output = model.forward(input.clone());
     let _: f32 = warmup_output.0.clone().max().into_scalar();
-    let _: i64 = warmup_output.1.clone().max().into_scalar();
+    let _: f32 = warmup_output.1.clone().max().into_scalar();
     println!("  Warmup completed in {:.2?}", start.elapsed());
 
     // Run inference with the loaded input

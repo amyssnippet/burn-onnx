@@ -172,7 +172,7 @@ impl NodeProcessor for LpPool2dProcessor {
         Ok(())
     }
 
-    fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
+    fn extract_config(&self, node: &RawNode, opset: usize) -> Result<Self::Config, ProcessError> {
         let mut kernel_shape = Vec::new();
         let mut strides = vec![1, 1];
         let mut pads = vec![0, 0, 0, 0];
@@ -236,6 +236,17 @@ impl NodeProcessor for LpPool2dProcessor {
                 dilations
             )));
         }
+        if dilations.iter().any(|&d| d != 1) {
+            if opset < 11 {
+                return Err(ProcessError::Custom(format!(
+                    "LpPool2d: dilations requires opset 11+, got opset {}",
+                    opset
+                )));
+            }
+            return Err(ProcessError::Custom(
+                "LpPool2d: dilations != 1 is not supported in burn-onnx yet".to_string(),
+            ));
+        }
         if p <= 0 {
             return Err(ProcessError::Custom(format!(
                 "LpPool2d: p must be > 0, got {}",
@@ -250,7 +261,7 @@ impl NodeProcessor for LpPool2dProcessor {
             [strides[0] as usize, strides[1] as usize],
             padding,
             [dilations[0] as usize, dilations[1] as usize],
-            ceil_mode == 1,
+            ceil_mode != 0,
             auto_pad,
             p,
         );
@@ -409,32 +420,42 @@ mod tests {
         let processor = LpPool2dProcessor;
         let prefs = OutputPreferences::new();
 
-        let mut kernel_zero = create_test_node(vec![0, 2], vec![1, 1], vec![0, 0, 0, 0], None, 0, None);
+        let mut kernel_zero =
+            create_test_node(vec![0, 2], vec![1, 1], vec![0, 0, 0, 0], None, 0, None);
         let err = processor
             .infer_types(&mut kernel_zero, 16, &prefs)
             .expect_err("Expected non-positive kernel_shape to fail");
         assert!(format!("{}", err).contains("kernel_shape values must be > 0"));
 
-        let mut stride_zero = create_test_node(vec![2, 2], vec![0, 1], vec![0, 0, 0, 0], None, 0, None);
+        let mut stride_zero =
+            create_test_node(vec![2, 2], vec![0, 1], vec![0, 0, 0, 0], None, 0, None);
         let err = processor
             .infer_types(&mut stride_zero, 16, &prefs)
             .expect_err("Expected non-positive stride to fail");
         assert!(format!("{}", err).contains("strides values must be > 0"));
 
-        let mut dilation_zero =
-            create_test_node(vec![2, 2], vec![1, 1], vec![0, 0, 0, 0], Some(vec![0, 1]), 0, None);
+        let mut dilation_zero = create_test_node(
+            vec![2, 2],
+            vec![1, 1],
+            vec![0, 0, 0, 0],
+            Some(vec![0, 1]),
+            0,
+            None,
+        );
         let err = processor
             .infer_types(&mut dilation_zero, 16, &prefs)
             .expect_err("Expected non-positive dilation to fail");
         assert!(format!("{}", err).contains("dilations values must be > 0"));
 
-        let mut p_zero = create_test_node(vec![2, 2], vec![1, 1], vec![0, 0, 0, 0], None, 0, Some(0));
+        let mut p_zero =
+            create_test_node(vec![2, 2], vec![1, 1], vec![0, 0, 0, 0], None, 0, Some(0));
         let err = processor
             .infer_types(&mut p_zero, 16, &prefs)
             .expect_err("Expected non-positive p to fail");
         assert!(format!("{}", err).contains("LpPool2d: p must be > 0"));
 
-        let p_zero_config = create_test_node(vec![2, 2], vec![1, 1], vec![0, 0, 0, 0], None, 0, Some(0));
+        let p_zero_config =
+            create_test_node(vec![2, 2], vec![1, 1], vec![0, 0, 0, 0], None, 0, Some(0));
         let err = processor
             .extract_config(&p_zero_config, 16)
             .expect_err("Expected non-positive p to fail in extract_config");

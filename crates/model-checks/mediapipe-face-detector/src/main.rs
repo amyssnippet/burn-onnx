@@ -108,11 +108,12 @@ fn main() {
     // Warmup run (compiles GPU shaders, allocates buffers)
     println!("\nWarmup inference...");
     let start = Instant::now();
-    let _ = model.forward(input.clone());
+    let warmup_output = model.forward(input.clone());
+    let _ = warmup_output.0.into_data();
     println!("  Warmup completed in {:.2?}", start.elapsed());
 
     // Run inference
-    println!("Running model inference...");
+    println!("\nRunning model inference...");
     let start = Instant::now();
     let (out_regressors, out_classifiers) = model.forward(input);
     let inference_time = start.elapsed();

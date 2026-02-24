@@ -174,7 +174,7 @@ impl NodeProcessor for LpPool1dProcessor {
         Ok(())
     }
 
-    fn extract_config(&self, node: &RawNode, _opset: usize) -> Result<Self::Config, ProcessError> {
+    fn extract_config(&self, node: &RawNode, opset: usize) -> Result<Self::Config, ProcessError> {
         let mut kernel_shape = Vec::new();
         let mut stride = vec![1];
         let mut pads = vec![0, 0];
@@ -238,6 +238,17 @@ impl NodeProcessor for LpPool1dProcessor {
                 dilations
             )));
         }
+        if dilations[0] != 1 {
+            if opset < 11 {
+                return Err(ProcessError::Custom(format!(
+                    "LpPool1d: dilations requires opset 11+, got opset {}",
+                    opset
+                )));
+            }
+            return Err(ProcessError::Custom(
+                "LpPool1d: dilations != 1 is not supported in burn-onnx yet".to_string(),
+            ));
+        }
         if p <= 0 {
             return Err(ProcessError::Custom(format!(
                 "LpPool1d: p must be > 0, got {}",
@@ -252,7 +263,7 @@ impl NodeProcessor for LpPool1dProcessor {
             stride[0] as usize,
             padding,
             dilations[0] as usize,
-            ceil_mode == 1,
+            ceil_mode != 0,
             auto_pad,
             p,
         );

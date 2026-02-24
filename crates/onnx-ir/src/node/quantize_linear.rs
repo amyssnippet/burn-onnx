@@ -88,7 +88,10 @@ impl NodeProcessor for QuantizeLinearProcessor {
         }
 
         let scale_dtype = node.inputs[1].ty.elem_type();
-        if !matches!(scale_dtype, DType::F32 | DType::F16 | DType::BF16 | DType::I32) {
+        if !matches!(
+            scale_dtype,
+            DType::F32 | DType::F16 | DType::BF16 | DType::I32
+        ) {
             return Err(ProcessError::TypeMismatch {
                 expected: "float, float16, bfloat16, or int32 tensor for y_scale".to_string(),
                 actual: format!("{:?}", scale_dtype),

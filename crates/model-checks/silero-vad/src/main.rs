@@ -112,11 +112,10 @@ fn main() {
     // Warmup run (compiles GPU shaders, allocates buffers)
     println!("Warmup inference...");
     {
-        let start = Instant::now();
         let input = Tensor::<MyBackend, 1>::zeros([1 * 512], &device).reshape([1, 512]);
         let state = Tensor::<MyBackend, 3>::zeros([2, 1, 128], &device);
-        let warmup_output = model.forward(input, reference.sample_rate, state);
-        let _ = warmup_output.0.into_data();
+        let start = Instant::now();
+        let _ = model.forward(input, reference.sample_rate, state);
         println!("  Warmup completed in {:.2?}\n", start.elapsed());
     }
 

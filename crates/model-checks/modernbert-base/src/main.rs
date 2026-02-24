@@ -145,12 +145,11 @@ fn main() {
     // Warmup run (compiles GPU shaders, allocates buffers)
     println!("\nWarmup inference...");
     let start = Instant::now();
-    let warmup_output = model.forward(input_ids.clone(), attention_mask.clone());
-    let _ = warmup_output.into_data();
+    let _ = model.forward(input_ids.clone(), attention_mask.clone());
     println!("  Warmup completed in {:.2?}", start.elapsed());
 
     // Run inference with the loaded input
-    println!("\nRunning model inference with test input...");
+    println!("Running model inference with test input...");
     let start = Instant::now();
 
     let last_hidden_state = model.forward(input_ids.clone(), attention_mask.clone());

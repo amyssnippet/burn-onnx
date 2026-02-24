@@ -46,26 +46,7 @@ fn ensure_cargo_bin_on_path() {
     let current_path = env::var_os("PATH").unwrap_or_default();
     let mut paths: Vec<PathBuf> = env::split_paths(&current_path).collect();
 
-    #[cfg(windows)]
-    let normalize_path = |path: &PathBuf| {
-        path.canonicalize()
-            .unwrap_or_else(|_| path.clone())
-            .to_string_lossy()
-            .to_lowercase()
-    };
-
-    #[cfg(windows)]
-    let cargo_bin_present = {
-        let cargo_bin_normalized = normalize_path(&cargo_bin);
-        paths
-            .iter()
-            .any(|path| normalize_path(path) == cargo_bin_normalized)
-    };
-
-    #[cfg(not(windows))]
-    let cargo_bin_present = paths.iter().any(|path| path == &cargo_bin);
-
-    if cargo_bin_present {
+    if paths.iter().any(|path| path == &cargo_bin) {
         return;
     }
 
